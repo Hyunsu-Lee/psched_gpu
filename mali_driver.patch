@@ -1,0 +1,5130 @@
+Binary files origin/TSK-Origin/drivers/gpu/arm/midgard/.mali_custom_ioctl.c.swn and tsk/drivers/gpu/arm/midgard/.mali_custom_ioctl.c.swn differ
+Binary files origin/TSK-Origin/drivers/gpu/arm/midgard/.mali_custom_ioctl.c.swo and tsk/drivers/gpu/arm/midgard/.mali_custom_ioctl.c.swo differ
+Binary files origin/TSK-Origin/drivers/gpu/arm/midgard/.mali_custom_ioctl.c.swp and tsk/drivers/gpu/arm/midgard/.mali_custom_ioctl.c.swp differ
+Binary files origin/TSK-Origin/drivers/gpu/arm/midgard/.mali_custom_sched.c.swn and tsk/drivers/gpu/arm/midgard/.mali_custom_sched.c.swn differ
+Binary files origin/TSK-Origin/drivers/gpu/arm/midgard/.mali_custom_sched.c.swo and tsk/drivers/gpu/arm/midgard/.mali_custom_sched.c.swo differ
+Binary files origin/TSK-Origin/drivers/gpu/arm/midgard/.mali_custom_sched.c.swp and tsk/drivers/gpu/arm/midgard/.mali_custom_sched.c.swp differ
+Binary files origin/TSK-Origin/drivers/gpu/arm/midgard/.mali_custom_snap.c.swp and tsk/drivers/gpu/arm/midgard/.mali_custom_snap.c.swp differ
+Binary files origin/TSK-Origin/drivers/gpu/arm/midgard/.mali_kbase_jm.c.swo and tsk/drivers/gpu/arm/midgard/.mali_kbase_jm.c.swo differ
+Binary files origin/TSK-Origin/drivers/gpu/arm/midgard/.mali_kbase_jm.c.swp and tsk/drivers/gpu/arm/midgard/.mali_kbase_jm.c.swp differ
+Binary files origin/TSK-Origin/drivers/gpu/arm/midgard/.mali_kbase_jm.h.swp and tsk/drivers/gpu/arm/midgard/.mali_kbase_jm.h.swp differ
+Binary files origin/TSK-Origin/drivers/gpu/arm/midgard/.mali_kbase_js_policy_cfs.c.swn and tsk/drivers/gpu/arm/midgard/.mali_kbase_js_policy_cfs.c.swn differ
+Binary files origin/TSK-Origin/drivers/gpu/arm/midgard/.mali_kbase_js_policy_cfs.c.swo and tsk/drivers/gpu/arm/midgard/.mali_kbase_js_policy_cfs.c.swo differ
+Binary files origin/TSK-Origin/drivers/gpu/arm/midgard/.mali_kbase_js_policy_cfs.c.swp and tsk/drivers/gpu/arm/midgard/.mali_kbase_js_policy_cfs.c.swp differ
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/Kbuild tsk/drivers/gpu/arm/midgard/Kbuild
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/Kbuild	2017-08-18 11:51:55.115668955 +0900
++++ tsk/drivers/gpu/arm/midgard/Kbuild	2017-08-18 11:18:55.948174356 +0900
+@@ -109,6 +109,10 @@
+ 	mali_kbase_sync.c \
+ 	mali_kbase_sync_user.c \
+ 	mali_kbase_replay.c \
++    mali_custom_ioctl.c \
++    mali_custom_proc.c \
++    mali_custom_sched.c \
++    mali_custom_snap.c \
+ 
+ ifeq ($(MALI_CUSTOMER_RELEASE),0)
+ SRC += \
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_ioctl.c tsk/drivers/gpu/arm/midgard/mali_custom_ioctl.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_ioctl.c	1970-01-01 09:00:00.000000000 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_custom_ioctl.c	2017-08-18 11:18:55.948174356 +0900
+@@ -0,0 +1,221 @@
++#include <mali_kbase.h>
++#include <mali_kbase_defs.h>
++#include <mali_kbase_mem.h>
++
++#ifdef _TSK_CUSTOM_IOCTL_
++
++void kbase_custom_ctx(struct kbase_context *kctx, u32 ctx_id);
++struct kbase_context* kbase_custom_ctx_find(struct kbase_context *kctx, u32 ctx_id);
++void kbase_debug_dump_registers(kbase_device *kbdev);
++
++void kbase_custom_ioctl(struct kbase_context *kctx, unsigned int cmd, unsigned long arg){
++
++	u32 nr_ioc = _IOC_NR(cmd);
++	u32 size = _IOC_SIZE(cmd);
++	gpu_umsg umsg;
++	struct kbase_device *kbdev = kctx->kbdev;
++
++	switch(nr_ioc){
++		case 0:
++			printk(KERN_ALERT"<gpu> ioctl00\n");
++			break;
++		case 1:
++			printk(KERN_ALERT"<gpu> ioctl01\n");
++
++			break;
++		case 2:
++			printk(KERN_ALERT"<gpu> ioctl02\n");
++			break;
++		case 3:
++			printk(KERN_ALERT"<gpu> ioctl03\n");
++			break;
++		case 4:
++			printk(KERN_ALERT"<gpu> ioctl04\n");
++			break;
++		case 5:
++			printk(KERN_ALERT"<gpu> ioctl05\n");
++			if(copy_from_user((void*)&umsg, (const void*)arg, size)==0){
++				struct kbase_context *selctx = NULL;
++				struct kbase_jd_atom *selatom = NULL;
++				int is_atom = 0;
++				int js, pos;
++
++				printk(KERN_ALERT"<gpu>Try to hardstop : ctx <%u> atom <%llu>\n", umsg.ctx_id, umsg.atom_id);
++				selctx = kbase_custom_ctx_find(kctx, umsg.ctx_id);
++				if(selctx == NULL){
++
++					printk(KERN_ALERT"<gpu> There is no ctx\n");
++					break;
++				}
++
++				for (js = 0; js < kctx->kbdev->gpu_props.num_job_slots; ++js){
++					for(pos =0; pos < 16; pos++){
++						if(!(kctx->kbdev->jm_slots[js].submitted[pos]==NULL)){
++							 selatom = kctx->kbdev->jm_slots[js].submitted[pos];
++							 if(selatom->atom_id == umsg.atom_id){
++								is_atom = 1;
++								//selatom->is_not_preempt = 0;
++								printk(KERN_ALERT"hardstop success : ctx[%u] atom[%llu]\n",selctx->ctx_id, selatom->atom_id);
++								kbase_job_slot_hardstop(selctx, js, selatom);
++								break;
++							 }
++						}
++					}
++				}
++			}
++			break;
++		case 6:
++			printk(KERN_ALERT"<gpu> ioctl06\n");
++			if(copy_from_user((void*)&umsg, (const void*)arg, size)==0){
++				kbdev->snap_granularity = (u32)umsg.data1;
++				printk(KERN_ALERT"SET snap_granularity : %u (pages)\n", kbdev->snap_granularity);
++
++			}
++			break;
++		case 7:
++			printk(KERN_ALERT"<gpu> ioctl07\n");
++			kbase_debug_dump_registers(kbdev);
++			break;
++		case 8:
++			printk(KERN_ALERT"<gpu> ioctl08\n");
++			if(copy_from_user((void*)&umsg, (const void*)arg, size)==0){
++				kbase_custom_ctx(kctx,umsg.ctx_id);
++			}
++			break;
++		case 9:
++			//for preempt trace(1:eviction latency, 2:preempt & launch delay)
++			printk(KERN_ALERT"<gpu> ioctl09\n");
++#ifdef _TSK_TRACE_EVICTION_
++			if(copy_from_user((void*)&umsg, (const void*)arg, size)==0){
++				kbdev->sw_trace  = (u8)umsg.data1;
++			}
++			printk(KERN_ALERT"switching sched trace : %u\n", kbdev->sw_trace);
++#endif
++			
++			break;
++		default:
++			break;
++	}
++}
++
++struct kbase_context* kbase_custom_ctx_find(struct kbase_context *kctx, u32 ctx_id){
++	int is_ctx = 0;
++	struct kbase_context *selctx;
++	struct list_head *ctx_pool = &kctx->kbdev->js_data.policy.cfs.ctx_queue_head;               
++	struct list_head *scheduled_ctx_pool = &kctx->kbdev->js_data.policy.cfs.scheduled_ctxs_head;
++
++	list_for_each_entry(selctx, ctx_pool, jctx.sched_info.runpool.policy_ctx.cfs.list){
++		if(selctx->ctx_id == ctx_id){
++			is_ctx = 1;
++			break;
++		}
++	}
++
++	if(!is_ctx){
++		list_for_each_entry(selctx, scheduled_ctx_pool, jctx.sched_info.runpool.policy_ctx.cfs.list){
++			if(selctx->ctx_id == ctx_id){
++				is_ctx = 1;
++				break;
++			}
++		}
++	}
++
++	if(!is_ctx){
++		return NULL;
++	}
++
++	return selctx;
++}
++
++void kbase_custom_ctx(struct kbase_context *kctx, u32 ctx_id){
++
++	struct kbase_device *kbdev;
++	kbase_jd_atom *a;
++	kbase_context *k;
++	u32 cid=~(u32)0x0;
++	kbase_context *selk=NULL;
++
++	kbasep_js_policy_cfs_ctx *ctx_info;
++	kbasep_js_policy *js_policy;
++	kbasep_js_policy_cfs *policy_info;
++	kbase_jm_slot *jm_slots;
++	                                   
++	struct list_head *job_list;
++	struct list_head *queue_head;
++	int i, j;
++
++	kbdev = kctx->kbdev;
++	cid = ctx_id;
++
++	printk(KERN_ALERT"<gpu> ++++++++GPU Queue INFO+++++++\n");
++
++	printk(KERN_ALERT"<gpu> [KBDEV - slot]\n");
++
++	jm_slots = kctx->kbdev->jm_slots;
++
++	for(i=0;i<3;i++){
++		for(j=0;j<16;j++){
++			if(!(jm_slots[i].submitted[j]==NULL)){
++				a = jm_slots[i].submitted[j];
++				printk(KERN_ALERT"<gpu> slot <%d> - submitted <%d> - ctx[%u] atom <%llu> - jc <0x%016llx>\n",i, j, a->kctx->ctx_id, a->atom_id, a->jc);
++			}
++		}                                                                                                    
++	}
++
++	printk(KERN_ALERT"<gpu> [KBDEV - ctx runpool]\n");
++
++	js_policy = &kctx->kbdev->js_data.policy;
++	policy_info = &js_policy->cfs;
++	queue_head = &policy_info->ctx_queue_head;
++
++	list_for_each_entry(k,queue_head, jctx.sched_info.runpool.policy_ctx.cfs.list){
++		if(k->ctx_id == cid)
++			selk = k;
++		printk(KERN_ALERT"<gpu> there is the <%u> ctx\n",k->ctx_id);
++	}
++
++	printk(KERN_ALERT"<gpu> [KBDEV - ctx scheduled runpool]\n");
++
++	queue_head = &policy_info->scheduled_ctxs_head;
++
++	list_for_each_entry(k,queue_head, jctx.sched_info.runpool.policy_ctx.cfs.list){
++		if(k->ctx_id == cid)
++			selk = k;
++		printk(KERN_ALERT"<gpu> there is the <%u> ctx\n",k->ctx_id);
++	}
++
++	printk(KERN_ALERT"<gpu> <ioctl> [KCTX - atom pool per slot]\n");
++
++	if(selk==NULL)
++		selk = kctx;
++
++	ctx_info = &selk->jctx.sched_info.runpool.policy_ctx.cfs;
++	for(i=0;i<7;i++){
++		job_list = &ctx_info->job_list_head[i];
++		
++		if(list_empty(job_list))
++			printk(KERN_ALERT"<gpu> <ioctl> job_list <%d> empty\n", i);
++		else{
++			list_for_each_entry(a,job_list, sched_info.cfs.list){
++				printk(KERN_ALERT"<gpu> <ioctl> there is the <%llu> atom - jc <0x%016llx>\n", a->atom_id, a->jc);
++			}
++		}
++	}
++	
++	printk(KERN_ALERT"<gpu> <ioctl> [Register Dump]\n");
++	printk(KERN_ALERT"<gpu> JOB_SLOT STATUS : 0x%08x | JOB_IRQ_RAWSTAT=0x%08x\n"
++				, kbase_reg_read(kbdev, JOB_SLOT_REG(1, JSn_STATUS),NULL)
++				, kbase_reg_read(kbdev, JOB_CONTROL_REG(JOB_IRQ_RAWSTAT), NULL));
++	printk(KERN_ALERT"<gpu> JSn_HEAD : 0x%llx\n", ((u64) kbase_reg_read(kbdev, JOB_SLOT_REG(1, JSn_HEAD_LO), NULL))
++			        | (((u64) kbase_reg_read(kbdev, JOB_SLOT_REG(1, JSn_HEAD_HI), NULL)) << 32));
++	printk(KERN_ALERT"<gpu> JSn_HEAD_NEXT : 0x%llx\n", ((u64) kbase_reg_read(kbdev, JOB_SLOT_REG(1, JSn_HEAD_NEXT_LO), NULL))
++			        | (((u64) kbase_reg_read(kbdev, JOB_SLOT_REG(1, JSn_HEAD_NEXT_HI), NULL)) << 32));
++	printk(KERN_ALERT"<gpu> JSn_COMMAND : 0x%08x | JSn_COMMAND_NEXT : 0x%08x\n"
++			        , kbase_reg_read(kbdev, JOB_SLOT_REG(1, JSn_COMMAND), NULL)
++				, kbase_reg_read(kbdev, JOB_SLOT_REG(1, JSn_COMMAND_NEXT), NULL));
++
++
++
++	printk(KERN_ALERT"<gpu> +++++++++++++++++++++++++++++\n"); 
++}
++#endif
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_ioctl.h tsk/drivers/gpu/arm/midgard/mali_custom_ioctl.h
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_ioctl.h	1970-01-01 09:00:00.000000000 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_custom_ioctl.h	2017-08-18 11:18:55.948174356 +0900
+@@ -0,0 +1,24 @@
++#define IOCTL_GPU_MAGIC (100)
++
++#define IOCTL_0 IOWR (IOCTL_GPU_MAGIC, 0, gpu_umsg )
++#define IOCTL_1 IOWR (IOCTL_GPU_MAGIC, 1, gpu_umsg )
++#define IOCTL_2 IOWR (IOCTL_GPU_MAGIC, 2, gpu_umsg )
++#define IOCTL_3 IOWR (IOCTL_GPU_MAGIC, 3, gpu_umsg )
++#define IOCTL_4 IOWR (IOCTL_GPU_MAGIC, 4, gpu_umsg )
++#define IOCTL_5 IOWR (IOCTL_GPU_MAGIC, 5, gpu_umsg )
++#define IOCTL_6 IOWR (IOCTL_GPU_MAGIC, 6, gpu_umsg )
++#define IOCTL_7 IOWR (IOCTL_GPU_MAGIC, 7, gpu_umsg )
++#define IOCTL_8 IOWR (IOCTL_GPU_MAGIC, 8, gpu_umsg )
++#define IOCTL_9 IOWR (IOCTL_GPU_MAGIC, 9, gpu_umsg )
++
++#define IOCTL_GPU_MAXNR 10
++
++typedef struct{
++    u32 ctx_id;
++    u64 atom_id;
++    u64 data1;
++    u64 data2;
++}__attribute__((packed)) gpu_umsg;
++
++
++void kbase_custom_ioctl(struct kbase_context *kctx, unsigned int cmd, unsigned long arg);
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_proc.c tsk/drivers/gpu/arm/midgard/mali_custom_proc.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_proc.c	1970-01-01 09:00:00.000000000 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_custom_proc.c	2017-08-18 11:18:55.948174356 +0900
+@@ -0,0 +1,172 @@
++#include <mali_kbase.h>
++#include <mali_kbase_defs.h>
++#include <mali_kbase_mem.h>
++
++#include <linux/highmem.h>
++#include <linux/mempool.h>
++#include <linux/mm.h>
++#include <linux/atomic.h> 
++  
++#include <linux/rbtree.h>
++#include <linux/fs.h>
++#include <linux/proc_fs.h>
++#include <linux/seq_file.h>
++
++
++#ifdef _TSK_CUSTOM_PROC_
++
++struct kbase_device *proc_kbdev;
++struct kbase_context *proc_kctx;
++
++struct kbase_context * proc_ctx_search(long proc_ctx_id){
++
++	int is_find=0;
++	struct kbase_context *sctx=NULL;
++
++	list_for_each_entry(sctx,&proc_kbdev->proc_ctx_list, proc_ctx_list_node){
++		if(sctx->ctx_id == (u32)proc_ctx_id){
++			is_find = 1;                 
++			break;                       
++		}
++	}
++
++	if(!is_find){
++		printk(KERN_ALERT"<gpu> proc_ctx_id(%ld) can't be found!\n", proc_ctx_id);
++		return NULL;
++	}
++	return sctx;
++	
++}
++
++static void *s_start(struct seq_file *m, loff_t *pos){
++
++	int fcount=0;
++	struct kbase_va_region *reg;
++	struct kbase_cpu_mapping *map;
++	struct rb_node *node = NULL;
++	struct rb_root *rbroot = NULL;
++	size_t s;
++
++	if(proc_kctx==NULL){
++		printk(KERN_ALERT"<gpu> proc_ctx_id can't be found!\n");
++		return NULL;
++	}
++	if(*pos == 0){ 
++		seq_printf(m,"|   CTX ID    : %05u            |\n", proc_kctx->ctx_id);
++	}
++
++	rbroot = &proc_kctx->reg_rbtree;
++
++	for(node = rb_first(rbroot) ; node ; node = rb_next(node)){  
++		reg = rb_entry(node, struct kbase_va_region, rblink);
++		s = kbase_reg_current_backed_size(reg);              
++		if(s){
++			if(fcount == *pos){
++				seq_printf(m,"==================================\n");
++				seq_printf(m,"|   region    :    %05d - %05zu |\n", reg->reg_id, reg->alloc->nents);
++				seq_printf(m,"|   PFN       : %16llx |\n", reg->start_pfn);
++				map = list_entry(&reg->alloc->mappings, kbase_cpu_mapping, mappings_list);
++				seq_printf(m,"|   MAP       : %16lx |\n", map->vm_start);
++				if ((reg->flags & KBASE_REG_ZONE_MASK) == KBASE_REG_ZONE_SAME_VA){
++					seq_printf(m,"|   type      :     ZONE_SAME_VA |\n");
++				}else if ((reg->flags & KBASE_REG_ZONE_MASK) == KBASE_REG_ZONE_EXEC){
++					seq_printf(m,"|   type      :     ZONE_EXEC_VA |\n");
++				}else if((reg->flags & KBASE_REG_ZONE_MASK) == KBASE_REG_ZONE_CUSTOM_VA){
++					seq_printf(m,"|   type      :     ZONE_CUST_VA |\n");
++				}
++
++				return reg;
++			}
++			fcount++;
++		}
++	}
++
++	return NULL;
++}
++
++static void *s_next(struct seq_file *m, void *p, loff_t *pos){
++	return NULL;
++}
++
++static void s_stop(struct seq_file *m, void *p){
++}                                               
++
++
++static int s_show(struct seq_file *m, void *p){
++	struct kbase_va_region *reg;
++	void *mapping;
++	u32 *mapping_32;
++	int i,j;
++
++	//tmp
++	u32 nr_limited_pages;
++
++	reg = (struct kbase_va_region*)p;
++
++	if(reg->alloc->nents < 10){
++		nr_limited_pages = reg->alloc->nents; 
++	}else{
++		nr_limited_pages = 10;
++	}
++	for(i=0;i<nr_limited_pages;i++){//reg->alloc->nents
++		mapping = kmap_atomic(pfn_to_page(PFN_DOWN(reg->alloc->pages[i])));
++		mapping_32 = mapping;
++		seq_printf(m, "==================================\n");
++		seq_printf(m, "| page number : %05d            |\n", i);
++		seq_printf(m, "==================================\n");
++		for(j=0;j<1024;j++){
++			
++			seq_printf(m, "|%04x| 0x%08x ", j*4 ,*(mapping_32+j));
++			
++			if(((j+1)%10)==0)            
++				seq_printf(m, "|\n");
++		}
++		seq_printf(m, "\n\n");
++		__kunmap_atomic(mapping);
++	}
++	return 0;
++}
++
++
++static const struct seq_operations mali_mem_seq_op = {
++	.start = s_start, 
++	.next = s_next,
++	.stop = s_stop,
++	.show = s_show,
++};                                                    
++
++
++static int mali_mem_seq_open(struct inode *inode, struct file *filp)
++{
++	return seq_open(filp, &mali_mem_seq_op);                    
++}
++
++ssize_t mali_mem_write(struct file *f, const char __user *buffer, size_t count, loff_t * data){
++
++	//struct kbase_device *kbdev = (struct kbase_device *)data;
++	proc_kctx = proc_ctx_search(simple_strtol(buffer,NULL, 10));
++	if(proc_kctx!=NULL)
++		printk(KERN_ALERT"<gpu> select proc_ctx_id : %u\n", proc_kctx->ctx_id);
++	return count;
++}
++
++static const struct file_operations mali_mem_proc_op ={
++	.open = mali_mem_seq_open,
++	.read = seq_read,
++	.write = mali_mem_write,
++	.llseek = seq_lseek,
++	.release = seq_release,
++};
++
++int kbase_mem_proc_init(struct kbase_device *kbdev){
++	if(!proc_create_data("mali_mem_dump",S_IRWXU,NULL, &mali_mem_proc_op, kbdev))
++		return 1;
++	proc_kbdev = kbdev;
++	proc_kctx = NULL;
++	INIT_LIST_HEAD(&kbdev->proc_ctx_list);
++	return 0; 
++}
++void kbase_mem_proc_exit(void){ 
++	remove_proc_entry("mali_mem_dump", NULL);
++}
++#endif
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_proc.h tsk/drivers/gpu/arm/midgard/mali_custom_proc.h
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_proc.h	1970-01-01 09:00:00.000000000 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_custom_proc.h	2017-08-18 11:18:55.948174356 +0900
+@@ -0,0 +1,2 @@
++int kbase_mem_proc_init(struct kbase_device *kbdev);
++void kbase_mem_proc_exit(void);
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_sched.c tsk/drivers/gpu/arm/midgard/mali_custom_sched.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_sched.c	1970-01-01 09:00:00.000000000 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_custom_sched.c	2017-08-18 11:18:55.948174356 +0900
+@@ -0,0 +1,367 @@
++#include <mali_kbase.h>
++#include <mali_kbase_defs.h>
++#include <mali_kbase_mem.h>
++#include <linux/kthread.h>
++#include <linux/wait.h>
++#include <mali_kbase_jm.h>
++
++#ifdef _TSK_CUSTOM_SCHED_
++
++void sc_hw_submit(kbase_device *kbdev, kbase_jd_atom *katom, int js){
++	unsigned long flags;
++	kbase_context *kctx;
++	u32 cfg;
++	u64 jc_head = katom->jc;
++
++	KBASE_DEBUG_ASSERT(kbdev);
++	KBASE_DEBUG_ASSERT(katom);
++       
++	kctx = katom->kctx;
++	spin_lock_irqsave(&katom->run_lock, flags);
++
++	if(katom->run_lock_flags){
++		//trace_gpu_custom("submit atom - stop", ktime_to_ns(ktime_get()), kctx->ctx_id, katom->atom_id, (u32)0, (u32)katom->run_lock_flags);
++		katom->run_lock_flags--;
++		spin_unlock_irqrestore(&katom->run_lock, flags);
++		return;
++	}else{
++		//trace_gpu_custom("submit atom - go", ktime_to_ns(ktime_get()), kctx->ctx_id, katom->atom_id, (u32)0, (u32)katom->run_lock_flags);
++		katom->run_lock_flags++;
++	}
++
++	/* Command register must be available */                                               
++	KBASE_DEBUG_ASSERT(kbasep_jm_is_js_free(kbdev, js, kctx));                             
++	/* Affinity is not violating */                                                        
++	//kbase_js_debug_log_current_affinities(kbdev);
++	KBASE_DEBUG_ASSERT(!kbase_js_affinity_would_violate(kbdev, js, katom->affinity));      
++	                                                                                       
++	kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), jc_head & 0xFFFFFFFF, kctx);
++	kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), jc_head >> 32, kctx);       
++
++	kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_AFFINITY_NEXT_LO), katom->affinity & 0xFFFFFFFF, kctx);
++	kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_AFFINITY_NEXT_HI), katom->affinity >> 32, kctx);       
++
++	/* start MMU, medium priority, cache clean/flush on end, clean/flush on start */                                                                      
++	cfg = kctx->as_nr | JSn_CONFIG_END_FLUSH_CLEAN_INVALIDATE | JSn_CONFIG_START_MMU | JSn_CONFIG_START_FLUSH_CLEAN_INVALIDATE | JSn_CONFIG_THREAD_PRI(8);
++
++	if (kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_JOBCHAIN_DISAMBIGUATION)) {
++		if (!kbdev->jm_slots[js].job_chain_flag) {
++			cfg |= JSn_CONFIG_JOB_CHAIN_FLAG;
++			katom->atom_flags |= KBASE_KATOM_FLAGS_JOBCHAIN;
++			kbdev->jm_slots[js].job_chain_flag = MALI_TRUE;
++		} else {
++			katom->atom_flags &= ~KBASE_KATOM_FLAGS_JOBCHAIN;
++			kbdev->jm_slots[js].job_chain_flag = MALI_FALSE;
++		}
++	}
++
++	kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_CONFIG_NEXT), cfg, kctx);
++
++	katom->start_timestamp = ktime_get();                                                                                                                 
++	                                                                                                                                                      
++	/* GO ! */
++	KBASE_LOG(2, kbdev->dev, 
++			"JS: Submitting atom %p from ctx %p to js[%d] with head=0x%llx, affinity=0x%llx", katom, kctx, js, jc_head, katom->affinity);
++	                                                                                                                                                      
++	KBASE_TRACE_ADD_SLOT_INFO(kbdev, JM_SUBMIT, kctx, katom, jc_head, js, (u32) katom->affinity);                                                         
++
++	kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), JSn_COMMAND_START, katom->kctx);
++	
++	spin_unlock_irqrestore(&katom->run_lock, flags);
++#ifdef _TSK_TRACE_EVAL_
++	kctx->kernel_time_start = ktime_get();
++#endif
++#ifdef _TSK_TRACE_PER_KERNEL_
++	kbdev->kernel_time_start = ktime_get();
++#endif
++#ifdef _TSK_TRACE_EVICTION_
++	if(kbdev->sw_trace == 3 && katom->eviction_stat == 3){//run preemption - launch
++		trace_gpu_custom_bench("PRUN-LAUNCH",katom->eviction_stat, ktime_to_ns(ktime_sub(ktime_get(), katom->launch_time)), 
++			ktime_to_ns(katom->p_delay), 0, 0, 0, 0, kbdev->run_evict, (u32)kbase_reg_read(kbdev, JOB_CONTROL_REG(JOB_IRQ_STATUS),NULL), (u32)katom->atom_id);
++	}else if(kbdev->sw_trace == 4 && katom->eviction_stat == 2){//snap cancel-launch
++		trace_gpu_custom_bench("PSNAP-LAUNCH",katom->eviction_stat, ktime_to_ns(ktime_sub(ktime_get(), katom->launch_time)), 
++			ktime_to_ns(katom->p_delay), 0, 0, 0, 0, kbdev->run_evict, (u32)kbase_reg_read(kbdev, JOB_CONTROL_REG(JOB_IRQ_STATUS),NULL), (u32)katom->atom_id);
++	}
++#endif
++
++	//trace_gpu_custom("submit atom", ktime_to_ns(ktime_get()), kctx->ctx_id, katom->atom_id, (u32)spin_is_locked(&katom->run_lock), (u32)0);
++
++}
++
++//lock 문제 발생 가능성 있지만, bit 단위로 보면 상관 없는 서로 다른 비트 접근한다.
++u32 sc_active_jobs(kbase_jm_slot *slot){
++	int i;
++	u32 nr_jobs = 0;
++	struct kbase_jm_slot *preempt_slot = &slot->kbdev->preempt_slot;
++
++	nr_jobs += slot->submitted_nr;
++	nr_jobs += preempt_slot->submitted_nr;
++
++	//trace_gpu_custom("done - irq", ktime_to_ns(ktime_get()), 0, 0, (u32)preempt_slot->submitted_nr, (u32)slot->submitted_nr);
++	for(i=0;i<slot->submitted_nr;i++){//active slot
++		if(!(slot->submitted[(slot->submitted_head + i) &15]->sched_stat & (SCHED_STAT_DONE | SCHED_STAT_PRUN))){
++	//		trace_gpu_custom("done - irq - 1", ktime_to_ns(ktime_get()), 0, 0, (u32)i, (u32)slot->submitted[(slot->submitted_head + i) &15]->sched_stat);
++			nr_jobs--;
++		}
++
++	}
++	
++	return nr_jobs;
++}
++
++//lock 문제 없음.
++u8 sc_is_preempt(kbase_jm_slot *slot){
++
++	kbase_jd_atom *katom;
++
++	if(slot->kbdev->preempt_slot.submitted_nr)
++		slot = &slot->kbdev->preempt_slot;
++
++	katom = slot->submitted[slot->submitted_head & BASE_JM_SUBMIT_SLOTS_MASK];
++	
++	if(katom == NULL){
++		//trace_gpu_custom("done error : atom null", ktime_to_ns(ktime_get()), 0, 0, (u32)slot->submitted_nr, (u32)0);
++		return 1;
++	}
++
++	katom->sched_stat &= ~SCHED_STAT_RUN;
++
++	if(katom->sched_stat & SCHED_STAT_PMASK){
++		return 1;
++	}else{
++		katom->sched_stat |= SCHED_STAT_DONE;
++#ifdef _TSK_TRACE_EVAL_
++		katom->kctx->kernel_time_total = ktime_add(katom->kctx->kernel_time_total, ktime_sub(slot->kbdev->kernel_time_end, katom->kctx->kernel_time_start));
++#endif
++#ifdef _TSK_TRACE_PER_KERNEL_
++		trace_gpu_custom_bench("PER-KERNEL",
++			katom->kctx->ctx_id,
++			ktime_to_ns(ktime_sub(slot->kbdev->kernel_time_end, slot->kbdev->kernel_time_start)),
++			ktime_to_ns(katom->stimes),
++			0,0,
++			katom->nr_spages, 0, 0, 0, 0);
++#endif
++		return 0;
++	}
++}
++
++//head slot의 경우는 100프로 동시 접근 가능하다.
++int sc_preempt(struct kbase_jd_atom *katom){
++
++	unsigned long sched_flags, run_flags;
++	struct kbase_device *kbdev = katom->kctx->kbdev;
++	kbase_jm_slot *slot;
++	u8 jobs_submitted;
++	kbase_jm_slot *preempt_slot = &kbdev->preempt_slot;
++	struct snapshot_kthread_context *sctx = &kbdev->snapshot_ctx.kthread_ctx[kbdev->snapshot_ctx.skthread_head];
++
++	struct kbase_jd_atom *slot_atom, *dequeued_katom;
++	int atom_priority;
++	u32 preempt_mode = 0;
++	int i, js=1;
++
++#ifdef _TSK_TRACE_EVICTION_
++	ktime_t p_delay = ktime_get();
++#endif
++
++	atom_priority = katom->kctx->jctx.sched_info.runpool.policy_ctx.cfs.gpgpu_priority;
++
++	slot = &katom->kctx->kbdev->jm_slots[js];
++	jobs_submitted = slot->submitted_nr;
++
++	//trace_gpu_custom("sched - start", ktime_to_ns(ktime_get()), katom->kctx->ctx_id, katom->atom_id, (u32)jobs_submitted, (u32) LIMIT_SUBMITTED_NR);
++	for(i=LIMIT_SUBMITTED_NR-1;i>=0;i--){
++
++		slot_atom = slot->submitted[(slot->submitted_head + i) & 15];
++
++		if(slot_atom != NULL){
++
++			if(atom_priority < slot_atom->kctx->jctx.sched_info.runpool.policy_ctx.cfs.gpgpu_priority){
++
++#ifdef _TSK_TRACE_EVAL_
++				katom->kctx->nr_preempt++;
++#endif
++				preempt_mode |=  (1<<i);
++				atomic_inc(&slot_atom->kctx->process_preempt);
++
++				spin_lock_irqsave(&sctx->sched_lock, sched_flags);
++
++				switch(slot_atom->sched_stat & SCHED_STAT_SMASK){
++				case SCHED_STAT_SLOT_READY:
++					/*Job이 Slot에 대기하고 있는 경우(head가 아닌경우)*/
++					
++					slot_atom->sched_stat |= SCHED_STAT_PSLOT;
++					dequeued_katom = kbasep_jm_dequeue_tail_submit_slot(slot);
++					slot->submitted[(slot->submitted_head + slot->submitted_nr+1) & BASE_JM_SUBMIT_SLOTS_MASK]=NULL;
++
++					if(dequeued_katom != slot_atom){
++						printk(KERN_ALERT"slot atom incorrect");
++						//발생 안하겠지만 실수 방지용.
++					}
++
++					kbase_jd_done(dequeued_katom, js, NULL, KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT);
++#ifdef _TSK_TRACE_EVICTION_
++					katom->eviction_stat = 1;
++					katom->patom[i] = dequeued_katom->atom_id;
++#endif
++
++					break;
++				case SCHED_STAT_SNAP:
++
++					atomic_inc(&slot_atom->kctx->process_preempt);
++					/* snapshot thread와 enqueue 모두에서 -- 해줘야 정상 스케줄링 가능.
++					 * 딱 이 경우만 동시 접근 가능하기 때문에 atomic 설정
++					 * psnap, psced로 나눈 이유는 enqueue와 kthread 종료 수행을 독립적으로 하기 위해서.
++					 * psnap은 enqueue시에 초기화, psced는 kthread에서 초기화.
++					 * process_preempt는 양쪽에서 --해줘야 정상 preempt 된것으로 보고 스케줄링.
++					 */
++
++#ifdef _TSK_TRACE_EVICTION_
++					slot_atom->snapc_stat = 1;
++					slot_atom->snapc_time = ktime_get();
++#endif
++					set_bit(SCHED_STAT_PSCED_BIT, &slot_atom->sched_stat);
++					//kthread와 동시 접근 가능한 비트이므로
++					slot_atom->sched_stat |= SCHED_STAT_PSNAP;
++
++					katom->sched_stat |= SCHED_STAT_PCER;
++					
++					
++					dequeued_katom = kbasep_jm_dequeue_tail_submit_slot(slot);
++					slot->submitted[(slot->submitted_head + slot->submitted_nr+1) & BASE_JM_SUBMIT_SLOTS_MASK]=NULL;
++
++					if(dequeued_katom != slot_atom){
++						printk(KERN_ALERT"slot atom incorrect");
++					}
++
++					kbase_jd_done(dequeued_katom, js, NULL, KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT);
++#ifdef _TSK_TRACE_EVICTION_
++					katom->eviction_stat = 2;
++					katom->patom[i] = dequeued_katom->atom_id;
++#endif
++					
++					break;
++				case SCHED_STAT_RUN:
++					/*Job이 GPU에서 동작 중일 경우*/
++					/*이 부분의 논리에 대해서 해석해보면
++					 * 1. 전제 조건으로 무조건 슬롯 head에는 수행 대기라고 생각한다.
++					 * 2. Command가 0이라면 이미 수행중이라고 생각한다.
++					 * 3. Command가 1이라 할지라도 hwsubmit 호출된 놈이라고 생각하기 떄문에 수행을 하고 있는지 안하고 있는지를 판단한 것이다.
++					 * 4. 먼저 커멘드를 없애고 넥스트 레지에 jc가 남아있다면 아직 수행은 하지 않은 것이다. 그러므로 슬롯에서 제거한다
++					 * 5. 안남아있다면 잘 모르겠지만 GPU는 jc부터 가져가서 바로 수행하고 수행에 들어가면 next를 없애는 모양이다.
++					 * 6. 
++					 */
++					spin_lock_irqsave(&slot_atom->run_lock, run_flags);
++					katom->sched_stat |= SCHED_STAT_PCER;
++
++					if(slot_atom->run_lock_flags == 0){
++						slot_atom->run_lock_flags++;
++
++						dequeued_katom = kbasep_jm_dequeue_tail_submit_slot(slot);
++						slot->submitted[(slot->submitted_head + slot->submitted_nr+1) & BASE_JM_SUBMIT_SLOTS_MASK]=NULL;
++
++						dequeued_katom->sched_stat &= ~SCHED_STAT_RUN;
++						dequeued_katom->sched_stat |= SCHED_STAT_PSLOT;
++
++						kbase_jd_done(dequeued_katom, js, NULL, KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT);
++
++					}else{
++						slot_atom->run_lock_flags--;
++
++						if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), NULL) == 0){
++							//진짜로 동작 중일 경우
++
++							slot_atom->sched_stat |= SCHED_STAT_PRUN;
++#ifdef _TSK_CUSTOM_SCHED_
++							kbdev->run_evict++;
++#endif
++#ifdef _TSK_TRACE_EVICTION_
++							kbdev->eviction_time = ktime_get();
++#endif
++							
++							kbasep_job_slot_soft_or_hard_stop_do_action(kbdev, js, JSn_COMMAND_HARD_STOP, slot_atom->core_req, slot_atom);
++
++							dequeued_katom = kbasep_jm_dequeue_tail_submit_slot(slot);
++
++							slot->submitted[(slot->submitted_head + slot->submitted_nr+1) & BASE_JM_SUBMIT_SLOTS_MASK]=NULL;
++							preempt_slot->submitted[(preempt_slot->submitted_head + preempt_slot->submitted_nr) & 15] = dequeued_katom;
++							preempt_slot->submitted_nr++;
++
++						}else{
++							kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), JSn_COMMAND_NOP, NULL);
++
++							if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), NULL) != 0 || 
++									kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), NULL) != 0){
++
++								dequeued_katom = kbasep_jm_dequeue_tail_submit_slot(slot);
++								slot->submitted[(slot->submitted_head + slot->submitted_nr+1) & BASE_JM_SUBMIT_SLOTS_MASK]=NULL;
++
++								kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), 0, NULL);
++								kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), 0, NULL);
++
++								dequeued_katom->sched_stat &= ~SCHED_STAT_RUN;
++								dequeued_katom->sched_stat |= SCHED_STAT_PSLOT;
++
++								if (kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_JOBCHAIN_DISAMBIGUATION)) 
++									slot->job_chain_flag = !slot->job_chain_flag;
++
++								kbase_jd_done(dequeued_katom, js, NULL, KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT);
++							}else{
++								//이 과정 수행도중에 job이 수행되버렸을 때
++								
++								slot_atom->sched_stat |= SCHED_STAT_PRUN;
++
++								kbasep_job_slot_soft_or_hard_stop_do_action(kbdev, js, JSn_COMMAND_HARD_STOP, slot_atom->core_req, slot_atom);
++
++								dequeued_katom = kbasep_jm_dequeue_tail_submit_slot(slot);
++								slot->submitted[(slot->submitted_head + slot->submitted_nr+1) & BASE_JM_SUBMIT_SLOTS_MASK]=NULL;        
++								preempt_slot->submitted[(preempt_slot->submitted_head + preempt_slot->submitted_nr) & 15] = dequeued_katom;
++								preempt_slot->submitted_nr++;
++
++							}
++						}
++					}
++
++					spin_unlock_irqrestore(&slot_atom->run_lock, run_flags);
++#ifdef _TSK_TRACE_EVICTION_
++					katom->eviction_stat = 3;
++#endif
++					break;
++				}
++				spin_unlock_irqrestore(&sctx->sched_lock, sched_flags);
++			}	
++		
++		}else{//slot이 비어있는 경우
++			preempt_mode |= (1<<i);
++		}
++	}
++
++#ifdef _TSK_TRACE_EVICTION_
++	katom->p_delay = ktime_sub(ktime_get(),p_delay);
++	katom->launch_time = ktime_get();
++#endif
++
++	return preempt_mode;
++}
++
++u8 sc_resched(struct kbase_jd_atom *katom){
++
++	bool_t need_to_try_schedule_context = false;
++	struct kbase_context *kctx = katom->kctx;
++
++	if(katom->sched_stat & SCHED_STAT_PMASK){
++
++		if(katom->sched_stat & SCHED_STAT_PRUN)
++			katom->sched_stat |= SCHED_STAT_RERUN;
++
++		katom->event_code = BASE_JD_EVENT_DONE;
++		katom->status = KBASE_JD_ATOM_STATE_IN_JS;
++		need_to_try_schedule_context |= kbasep_js_add_job(kctx, katom);
++
++	}else{
++		need_to_try_schedule_context = jd_done_nolock(katom);
++	}
++
++	return need_to_try_schedule_context;
++}
++#endif
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_sched.h tsk/drivers/gpu/arm/midgard/mali_custom_sched.h
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_sched.h	1970-01-01 09:00:00.000000000 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_custom_sched.h	2017-08-18 11:18:55.948174356 +0900
+@@ -0,0 +1,51 @@
++#define LIMIT_SUBMITTED_NR (2)
++
++#define SCHED_RT_PRIORITY (-19)
++
++//stat
++#define SCHED_STAT_INIT (0UL)     //(0<<0)
++#define SCHED_STAT_POOL (1UL)     //(1<<0)
++#define SCHED_STAT_SLOT (2UL)     //(1<<1)
++#define SCHED_STAT_RMASK (3UL)    //((1<<0)|(1<<1))=(SCHED_STAT_POOL|SCHED_STAT_SLOT)
++
++
++#define SCHED_STAT_SNAP (4UL)     //(1<<2)
++#define SCHED_STAT_RUN  (8UL)     //(1<<3)
++#define SCHED_STAT_DONE (16UL)    //(1<<4)
++#define SCHED_STAT_RERUN (32UL)   //(1<<5)
++#define SCHED_STAT_SMASK (12UL)   //((1<<2)|(1<<3))=(|SCHED_STAT_SNAP|SCHED_STAT_RUN)
++#define SCHED_STAT_SLOT_READY (0UL)
++//#define SCHED_STAT_RMASK (28)   //((1<<2)|(1<<3)|(1<<4))=(SCHED_STAT_SNAP|SCHED_STAT_RUN|SCHED_STAT_DONE)
++
++#define SCHED_STAT_PSLOT (64UL)   //(1<<6)
++#define SCHED_STAT_PSNAP (128UL)  //(1<<7)
++#define SCHED_STAT_PRUN (256UL)   //(1<<8)
++#define SCHED_STAT_PMASK (448UL)  //((1<<6)|(1<<7)|(1<<8))=(SCHED_STAT_PSLOT|SCHED_STAT_PSNAP|SCHED_STAT_PRUN)
++
++#define SCHED_STAT_PCER (512UL)  //(1<<9)
++#define SCHED_STAT_PSCED (1024UL) //(1<<10)
++
++//bit
++#define SCHED_STAT_POOL_BIT (0)
++#define SCHED_STAT_SLOT_BIT (1)
++
++#define SCHED_STAT_SNAP_BIT (2)
++#define SCHED_STAT_RUN_BIT  (3)
++#define SCHED_STAT_DONE_BIT (4)
++#define SCHED_STAT_RERUN_BIT (5)
++
++#define SCHED_STAT_PSLOT_BIT (6)
++#define SCHED_STAT_PSNAP_BIT (7)
++#define SCHED_STAT_PRUN_BIT (8)
++
++#define SCHED_STAT_PSCER_BIT (9)
++#define SCHED_STAT_PSCED_BIT (10)
++
++
++
++void sc_hw_submit(kbase_device *kbdev, kbase_jd_atom *katom, int js);
++int sc_preempt(struct kbase_jd_atom *katom);
++u32 sc_active_jobs(kbase_jm_slot *slot);
++u8 sc_is_preempt(kbase_jm_slot *slot);
++u8 sc_resched(struct kbase_jd_atom *katom);
++
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_snap.c tsk/drivers/gpu/arm/midgard/mali_custom_snap.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_snap.c	1970-01-01 09:00:00.000000000 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_custom_snap.c	2017-08-18 11:18:55.948174356 +0900
+@@ -0,0 +1,275 @@
++#include <mali_kbase.h>     
++#include <mali_kbase_defs.h>
++#include <mali_kbase_mem.h>
++#include <linux/kthread.h>
++#include <linux/wait.h>
++#include <mali_kbase_jm.h>
++#include <linux/sched.h>
++
++
++#ifdef _TSK_CUSTOM_SNAP_
++/*start*/
++
++static INLINE int is_snapshot_cancel(struct kbase_jd_atom *katom){
++	
++	//if(test_bit(SCHED_STAT_PSCED_BIT,&katom->sched_stat)){// & SCHED_STAT_PSCED){
++	if(katom->sched_stat & SCHED_STAT_PSCED){
++		return 1;
++	}
++	return 0;
++}
++
++
++void create_snapthread(struct kbase_device *kbdev, int id){
++	struct sched_param param = {.sched_priority = 1};
++	kbdev->snapshot_ctx.kthread_ctx[id].snapshot_kthread = kthread_create(snapshot_kthread,(void*)&kbdev->snapshot_ctx.kthread_ctx[id],"snapshot_kthread");
++	sched_setscheduler(kbdev->snapshot_ctx.kthread_ctx[id].snapshot_kthread, SCHED_FIFO, &param);
++	kthread_bind(kbdev->snapshot_ctx.kthread_ctx[id].snapshot_kthread, KTHREAD_CORE_BASE+id);
++	wake_up_process(kbdev->snapshot_ctx.kthread_ctx[id].snapshot_kthread);
++}
++
++void destroy_snapthread(struct kbase_device *kbdev, int id){
++	kthread_stop(kbdev->snapshot_ctx.kthread_ctx[id].snapshot_kthread);
++}   
++
++void init_snapshot_ctx(struct kbase_device *kbdev){                                  
++	int i;
++	kbdev->snapshot_ctx.skthread_head = 0;
++	for(i=0;i<NR_SNAPSHOT_KTHREAD;i++){
++		kbdev->snapshot_ctx.kthread_ctx[i].kbdev = kbdev;
++		kbdev->snapshot_ctx.kthread_ctx[i].katom = NULL;
++		kbdev->snapshot_ctx.kthread_ctx[i].snapshot_kthread = NULL;
++		spin_lock_init(&kbdev->snapshot_ctx.kthread_ctx[i].sched_lock);
++
++		init_waitqueue_head(&kbdev->snapshot_ctx.kthread_ctx[i].snap_wqueue);
++		create_snapthread(kbdev, i);
++	}
++				                                                                                     
++}                                                                                    
++
++void snapshot_ipi(void *snapshot_context){
++	unsigned long flags;
++	struct snapshot_kthread_context *sctx = (struct snapshot_kthread_context*)snapshot_context;
++	struct kbase_device *kbdev = sctx->kbdev;
++
++	int i, ret = 0;
++	
++	if(sctx->katom == NULL){
++		//trace_gpu_custom("kthread - wakeup null", ktime_to_ns(ktime_get()), 0, 0, (u32)0, (u32)0);
++		goto cancel;
++	}
++	//trace_gpu_custom("kthread - start", ktime_to_ns(ktime_get()), sctx->katom->kctx->ctx_id, sctx->katom->atom_id, (u32)0, (u32)0);
++	
++	if((ret = is_snapshot_cancel(sctx->katom)))
++		goto cancel;
++
++	if(!(sctx->katom->sched_stat & SCHED_STAT_RERUN))
++		snapshot_store(sctx->katom);
++	else{                           
++		snapshot_restore(sctx->katom);
++	}
++
++	spin_lock_irqsave(&sctx->sched_lock, flags);
++	if((ret = is_snapshot_cancel(sctx->katom))){
++		spin_unlock_irqrestore(&sctx->sched_lock, flags);
++		goto cancel;
++	}
++	
++	sctx->katom->sched_stat ^= SCHED_STAT_SMASK; //~SCHED_STAT_SNAP & SCHED_STAT_RUN
++	spin_unlock_irqrestore(&sctx->sched_lock, flags);
++
++	//trace_gpu_custom("kthread - submit call", ktime_to_ns(ktime_get()), sctx->katom->kctx->ctx_id, sctx->katom->atom_id, (u32)0, (u32)0);
++	sc_hw_submit(kbdev, sctx->katom, 1);
++
++	sctx->katom->param.nr_restore = 0;
++	for(i=sctx->katom->param.nr_restore;sctx->katom->param.param[i]!=NULL;i++)
++		sctx->katom->param.nr_restore_pages[i]=0;
++
++cancel:
++	if(ret){
++		atomic_dec(&sctx->katom->kctx->process_preempt);
++		clear_bit(SCHED_STAT_PSCED_BIT, &sctx->katom->sched_stat);
++#ifdef _TSK_TRACE_EVICTION_
++		if(kbdev->sw_trace == 2)
++			trace_gpu_custom_bench("SNAP-EVICTION",sctx->katom->atom_id, ktime_to_ns(ktime_sub(ktime_get(), sctx->katom->snapc_time)), 0,0,0,0,0,0,0,0);
++#endif
++	}
++	
++	//trace_gpu_custom("kthread - sleep-1", ktime_to_ns(ktime_get()), sctx->katom->kctx->ctx_id, sctx->katom->atom_id, (u32)0, (u32)0);
++	sctx->katom = NULL;
++	//trace_gpu_custom("kthread - exit", ktime_to_ns(ktime_get()), 0, 0, (u32)0, (u32)0);
++	return;
++}
++
++void submit_snapshot(int cpu, struct snapshot_kthread_context* sctx){
++
++	smp_call_function_single(cpu+4, snapshot_ipi, (void*)sctx, 0);
++}
++
++int snapshot_kthread(void *param){
++	
++	unsigned long flags;
++	struct snapshot_kthread_context *sctx = (struct snapshot_kthread_context*)param;
++	struct kbase_device *kbdev = sctx->kbdev;
++
++	int i, ret = 0;
++
++	//trace_gpu_custom("kthread - create", ktime_to_ns(ktime_get()), 0, 0, (u32)0, (u32)0);
++	do{
++		//trace_gpu_custom("kthread - sleep-2", ktime_to_ns(ktime_get()), 0, 0, (u32)0, (u32)0);
++		interruptible_sleep_on(&sctx->snap_wqueue);
++
++		if(sctx->katom == NULL){
++			//trace_gpu_custom("kthread - wakeup null", ktime_to_ns(ktime_get()), 0, 0, (u32)0, (u32)0);
++			goto sleep;
++		}
++		//trace_gpu_custom("kthread - start", ktime_to_ns(ktime_get()), sctx->katom->kctx->ctx_id, sctx->katom->atom_id, (u32)0, (u32)0);
++
++
++		//snapshot
++		if((ret = is_snapshot_cancel(sctx->katom)))
++			goto sleep;
++
++		if(!(sctx->katom->sched_stat & SCHED_STAT_RERUN))
++			snapshot_store(sctx->katom);
++		else{                           
++			snapshot_restore(sctx->katom);
++		}
++		
++		spin_lock_irqsave(&sctx->sched_lock, flags);
++		if((ret = is_snapshot_cancel(sctx->katom))){
++			spin_unlock_irqrestore(&sctx->sched_lock, flags);
++			goto sleep;
++		}
++
++
++		sctx->katom->sched_stat ^= SCHED_STAT_SMASK; //~SCHED_STAT_SNAP & SCHED_STAT_RUN
++		spin_unlock_irqrestore(&sctx->sched_lock, flags);
++
++		//trace_gpu_custom("kthread - submit call", ktime_to_ns(ktime_get()), sctx->katom->kctx->ctx_id, sctx->katom->atom_id, (u32)0, (u32)0);
++		sc_hw_submit(kbdev, sctx->katom, 1);
++
++		sctx->katom->param.nr_restore = 0;
++		for(i=sctx->katom->param.nr_restore;sctx->katom->param.param[i]!=NULL;i++)
++			sctx->katom->param.nr_restore_pages[i]=0;
++
++
++sleep:
++		if(ret){
++			ret = 0;
++			atomic_dec(&sctx->katom->kctx->process_preempt);
++			clear_bit(SCHED_STAT_PSCED_BIT, &sctx->katom->sched_stat);
++#ifdef _TSK_TRACE_EVICTION_
++			if(kbdev->sw_trace == 2)
++				trace_gpu_custom_bench("SNAP-EVICTION",sctx->katom->atom_id, ktime_to_ns(ktime_sub(ktime_get(), sctx->katom->snapc_time)),0,0,0,0,0,0,0,0);
++#endif
++			//trace_gpu_custom("kthread - PSCED", ktime_to_ns(ktime_get()), sctx->katom->kctx->ctx_id, sctx->katom->atom_id, (u32)0, (u32)0);
++		}
++		//trace_gpu_custom("kthread - sleep-1", ktime_to_ns(ktime_get()), sctx->katom->kctx->ctx_id, sctx->katom->atom_id, (u32)0, (u32)0);
++		sctx->katom = NULL;
++	}while(1);
++	//trace_gpu_custom("kthread - exit", ktime_to_ns(ktime_get()), 0, 0, (u32)0, (u32)0);
++
++	return 0;
++}
++
++/*end*/
++
++void snapshot_store(struct kbase_jd_atom* katom){
++	int i, j;
++	struct kbase_va_region* reg = NULL;
++	unsigned long mem_flag;
++	
++	u32 granularity = katom->kctx->kbdev->snap_granularity;
++	int limit_pages_granularity;
++
++#ifdef CONFIG_GPU_TRACEPOINTS
++	ktime_t start, end;
++	u32 nr_pages=0;
++#endif
++	//kbase_gpu_vm_lock(katom->kctx);
++	spin_lock_irqsave(&katom->kctx->snap_lock, mem_flag);
++#ifdef CONFIG_GPU_TRACEPOINTS
++	start = ktime_get();
++#endif
++
++	for(i=katom->param.nr_store;katom->param.param[i]!=NULL;i++){
++		        reg = katom->param.param[i];
++			limit_pages_granularity = reg->dreg.nr_pages/granularity;
++
++			for(j=katom->param.nr_store_pages[i];j<limit_pages_granularity;j++){
++				if(is_snapshot_cancel(katom))
++					goto snapshot_cancel;
++
++				memcpy(reg->dreg.kdp+j*PAGE_SIZE*granularity, reg->dreg.ksp+j*PAGE_SIZE*granularity, PAGE_SIZE*granularity);
++				katom->param.nr_store_pages[i]++;
++			}
++
++			if((reg->dreg.nr_pages%granularity != 0) && (katom->param.nr_store_pages[i] < limit_pages_granularity+1)){
++				memcpy(reg->dreg.kdp+j*PAGE_SIZE*granularity, reg->dreg.ksp+j*PAGE_SIZE*granularity, PAGE_SIZE*(reg->dreg.nr_pages%granularity));
++				katom->param.nr_store_pages[i]++;
++			}
++
++			
++			katom->param.nr_store++;
++#ifdef CONFIG_GPU_TRACEPOINTS
++			nr_pages += reg->dreg.nr_pages;
++#endif
++	}
++snapshot_cancel:
++#ifdef CONFIG_GPU_TRACEPOINTS
++	end = ktime_get(); // per kernel snapshot delay
++	//trace_gpu_custom("snapshot store", ktime_to_ns(ktime_sub(end, start)), katom->kctx->ctx_id, katom->atom_id, 
++	//		(u32)katom->param.nr_store, (u32)nr_pages);
++#endif
++        spin_unlock_irqrestore(&katom->kctx->snap_lock, mem_flag);
++	//kbase_gpu_vm_unlock(katom->kctx);
++
++#ifdef _TSK_TRACE_PER_KERNEL_
++	//per kernel snapshot delay
++	katom->stimes = ktime_sub(end, start);
++	katom->nr_spages = nr_pages;
++#endif
++
++#ifdef _TSK_TRACE_EVAL_
++	katom->kctx->nr_spages+=nr_pages; //for total snapshot memory size
++	katom->kctx->stimes = ktime_add(katom->kctx->stimes, ktime_sub(end, start));
++#endif
++}
++
++void snapshot_restore(struct kbase_jd_atom* katom){
++	int i, j;
++	struct kbase_va_region* reg;
++	unsigned long mem_flag;
++	
++	u32 granularity = katom->kctx->kbdev->snap_granularity;
++	int limit_pages_granularity;                           
++
++	//kbase_gpu_vm_lock(katom->kctx);
++	spin_lock_irqsave(&katom->kctx->snap_lock, mem_flag);
++	reg = NULL;
++
++	for(i=katom->param.nr_restore;katom->param.param[i]!=NULL;i++){
++			reg = katom->param.param[i];
++			limit_pages_granularity = reg->dreg.nr_pages/granularity;
++
++			for(j=katom->param.nr_restore_pages[i];j<limit_pages_granularity;j++){
++				if(is_snapshot_cancel(katom))
++					goto snapshot_cancel;
++
++				memcpy(reg->dreg.ksp+j*PAGE_SIZE*granularity, reg->dreg.kdp+j*PAGE_SIZE*granularity, PAGE_SIZE*granularity);
++				katom->param.nr_restore_pages[i]++;
++			}
++
++			if((reg->dreg.nr_pages%granularity != 0) && (katom->param.nr_restore_pages[i] < limit_pages_granularity+1)){
++				memcpy(reg->dreg.ksp+j*PAGE_SIZE*granularity, reg->dreg.kdp+j*PAGE_SIZE*granularity, PAGE_SIZE*(reg->dreg.nr_pages%granularity));
++				katom->param.nr_restore_pages[i]++;
++			}
++
++			katom->param.nr_restore++;
++	}
++snapshot_cancel:
++	spin_unlock_irqrestore(&katom->kctx->snap_lock, mem_flag);
++	//kbase_gpu_vm_unlock(katom->kctx);
++}
++#endif
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_snap.h tsk/drivers/gpu/arm/midgard/mali_custom_snap.h
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_snap.h	1970-01-01 09:00:00.000000000 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_custom_snap.h	2017-08-18 11:18:55.948174356 +0900
+@@ -0,0 +1,52 @@
++#define KTHREAD_CORE_BASE (4)
++#define NR_SNAPSHOT_KTHREAD (2)
++#define BASE_SNAP_GRANULARITY (1280);
++
++typedef struct kernel_live_context_param{
++    struct list_head param_node;
++    struct kbase_va_region* param[20];
++    u32 nr_store, nr_restore;
++    u32 nr_store_pages[20];
++    u32 nr_restore_pages[20];
++}kernel_lparam;
++
++
++typedef struct custom_dump_region{
++    struct list_head dreg_node;
++
++    struct kbase_context *kctx;
++    struct kbase_va_region *reg;
++        
++    size_t nr_pages;
++    struct page **sp;
++    struct page **dp;
++    void *ksp;
++    void *kdp;
++
++}custom_dump_region;
++
++typedef struct snapshot_kthread_context{
++
++    struct kbase_device *kbdev;
++    struct kbase_jd_atom *katom;
++    struct task_struct *snapshot_kthread;
++    wait_queue_head_t snap_wqueue;
++
++	spinlock_t sched_lock;
++
++}snapshot_kthread_context;
++
++typedef struct snapshot_kthreads{
++    u32 skthread_head;
++    snapshot_kthread_context kthread_ctx[NR_SNAPSHOT_KTHREAD];
++
++}snapshot_kthreads;
++
++
++void init_snapshot_ctx(struct kbase_device *kbdev);
++void submit_snapshot(int cpu, struct snapshot_kthread_context* sctx);
++int snapshot_kthread(void *param);
++void create_snapthread(struct kbase_device *kbdev, int id);
++void destroy_snapthread(struct kbase_device *kbdev,int id);
++void snapshot_store(struct kbase_jd_atom* katom);
++void snapshot_restore(struct kbase_jd_atom* katom);
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_tsk.h tsk/drivers/gpu/arm/midgard/mali_custom_tsk.h
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_custom_tsk.h	1970-01-01 09:00:00.000000000 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_custom_tsk.h	2017-08-18 12:15:03.926280745 +0900
+@@ -0,0 +1,28 @@
++#define _TSK_CUSTOM_PRINT_
++
++#ifdef CONFIG_GPU_TRACEPOINTS
++//#define _TSK_TRACE_EVAL_
++//#define _TSK_TRACE_PER_KERNEL_
++//#define _TSK_TRACE_EVICTION_
++#endif
++
++#define _TSK_CUSTOM_SNAP_
++#ifdef _TSK_CUSTOM_SNAP_
++#include <mali_custom_snap.h>
++#endif
++
++#define _TSK_CUSTOM_SCHED_
++#ifdef _TSK_CUSTOM_SCHED_
++#include <mali_custom_sched.h>
++#endif
++
++#define _TSK_CUSTOM_PROC_
++#ifdef _TSK_CUSTOM_PROC_
++#include <mali_custom_proc.h>
++#endif
++
++#define _TSK_CUSTOM_IOCTL_
++#ifdef _TSK_CUSTOM_IOCTL_ 
++#include <mali_custom_ioctl.h>
++#endif
++
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_context.c tsk/drivers/gpu/arm/midgard/mali_kbase_context.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_context.c	2017-08-18 11:51:55.116668948 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_context.c	2017-08-18 11:18:55.949174349 +0900
+@@ -108,16 +108,39 @@
+ #ifdef CONFIG_MALI_TRACE_TIMELINE
+ 	atomic_set(&kctx->timeline.jd_atoms_in_flight, 0);
+ #endif
+-	//custom_trace start
+-	kctx->task = current;
+-	kctx->app_start = ktime_get();
+-	kctx->mem_count = 0;
+-	kctx->kernel_count = 0;
+-	kctx->nr_dep_job = 0;
++
++#ifdef _TSK_CUSTOM_                                                                                        
+ 	kctx->ctx_id = kbdev->nr_ctx_id;
+ 	kbdev->nr_ctx_id++;
+-	//custom_trace end
++	kctx->is_cl = 3;//undefined state
++#ifdef CONFIG_GPU_TRACEPOINTS
++	kctx->task = current;
++
++	if(!strcmp(current->comm, "micro_bench") || !strcmp(current->comm, "granularity"))
++		kctx->is_micro = 1;
+ 
++#ifdef _TSK_TRACE_EVAL_
++	kctx->nr_kernel = 0;
++	kctx->nr_spages = 0;
++	kctx->nr_mpages = 0;
++	kctx->nr_preempt = 0;
++
++	kctx->ttimes = ktime_get();
++#endif
++
++#endif
++#endif
++#ifdef _TSK_CUSTOM_SCHED_
++	atomic_set(&kctx->process_preempt, 0);
++	kctx->nr_dep_job = 0;
++#endif
++#ifdef _TSK_CUSTOM_SNAP_
++	spin_lock_init(&kctx->snap_lock);
++#endif
++#ifdef _TSK_CUSTOM_PROC_ 
++	INIT_LIST_HEAD(&kctx->proc_ctx_list_node);
++	list_add_tail(&kctx->proc_ctx_list_node, &kbdev->proc_ctx_list);
++#endif
+ 
+ 	return kctx;
+ 
+@@ -168,29 +191,29 @@
+ 	KBASE_DEBUG_ASSERT(NULL != kbdev);
+ 
+ 	KBASE_TRACE_ADD(kbdev, CORE_CTX_DESTROY, kctx, NULL, 0u, 0u);
+-
+-
+-	//measure
+-	kctx->app_end = ktime_get();
+-#ifdef CONFIG_GPU_TRACEPOINTS
+-	//trace_gpu_custom("Context Destroy", ktime_to_ns(ktime_sub(kctx->app_end, kctx->app_start)), 0, 0, (u32)kctx->mem_count, (u32)kctx->kernel_count);
+-
+-	if(strcmp(kctx->task->comm, "micro_bench")){
+-	trace_gpu_custom_bench(kctx->task->comm, 
++#ifdef _TSK_CUSTOM_ 
++#ifdef _TSK_TRACE_EVAL_
++	if(!kctx->is_micro){
++	
++		trace_gpu_custom_bench(kctx->task->comm,
+ 			kctx->ctx_id,
+-			ktime_to_ns(ktime_sub(kctx->app_end, kctx->app_start)),
+-			0,0,0,0,
+-			kctx->mem_count,
+-			kctx->kernel_count,
+-			0,
++			ktime_to_ns(ktime_sub(ktime_get(), kctx->ttimes)),
++			ktime_to_ns(kctx->stimes),
++			ktime_to_ns(kctx->mtimes),
++			ktime_to_ns(kctx->kernel_time_total),
++			kctx->nr_spages,
++			kctx->nr_mpages,
++			kctx->nr_kernel,
++			kctx->nr_preempt, 
+ 			kctx->nr_dep_job);
+ 	}
+ 
+ #endif
+-/*	printk(KERN_ALERT"Application GPU Using Time : %llu\n", ktime_to_us(kctx->app_end) - ktime_to_us(kctx->app_start));
+-	printk(KERN_ALERT"Application GPU Using Memory : %d\n", kctx->mem_count);
+-	printk(KERN_ALERT"Application GPU Submitting Kernel : %d\n", kctx->kernel_count);
+-*/
++#endif  
++#ifdef _TSK_CUSTOM_PROC_
++	list_del(&kctx->proc_ctx_list_node);
++#endif
++
+ 	/* Ensure the core is powered up for the destroy process */
+ 	/* A suspend won't happen here, because we're in a syscall from a userspace
+ 	 * thread. */
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_core_linux.c tsk/drivers/gpu/arm/midgard/mali_kbase_core_linux.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_core_linux.c	2017-08-18 11:51:55.117668941 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_core_linux.c	2017-08-18 11:18:55.949174349 +0900
+@@ -950,6 +950,11 @@
+ 	u32 size = _IOC_SIZE(cmd);
+ 	kbase_context *kctx = filp->private_data;
+ 
++#ifdef _TSK_CUSTOM_IOCTL_                          
++	if(_IOC_TYPE(cmd)==100)
++		kbase_custom_ioctl(kctx, cmd, arg);
++#endif
++
+ 	if (size > CALL_MAX_SIZE)
+ 		return -ENOTTY;
+ 
+@@ -1075,6 +1080,29 @@
+ 	unsigned long flags;
+ 	struct kbase_device *kbdev = kbase_untag(data);
+ 	u32 val;
++#ifdef _TSK_CUSTOM_SCHED_
++	val = kbase_reg_read(kbdev, JOB_CONTROL_REG(JOB_IRQ_STATUS), NULL);
++
++	if(kbdev->run_evict && val >> 16 ){
++		kbdev->run_evict--;
++		kbase_reg_write(kbdev, JOB_CONTROL_REG(JOB_IRQ_CLEAR), val & ((1 << 1) | (1 << (1 + 16))), NULL);
++
++#ifdef _TSK_TRACE_EVICTION_
++		if(kbdev->sw_trace == 1){
++			trace_gpu_custom_bench("RUN-EVICTION", kbdev->run_evict, ktime_to_ns(ktime_sub(ktime_get(), kbdev->eviction_time)),0,0,0,0,0,0,0,0);
++		}
++#endif
++	}
++
++#ifdef _TSK_TRACE_EVAL_
++	kbdev->kernel_time_end = ktime_get();
++#endif
++#ifdef _TSK_TRACE_PER_KERNEL_
++	kbdev->kernel_time_end = ktime_get();
++#endif
++	
++#endif
++
+ 
+ 	spin_lock_irqsave(&kbdev->pm.gpu_powered_lock, flags);
+ 
+@@ -1083,8 +1111,9 @@
+ 		spin_unlock_irqrestore(&kbdev->pm.gpu_powered_lock, flags);
+ 		return IRQ_NONE;
+ 	}
+-
++#ifndef _TSK_CUSTOM_SCHED_
+ 	val = kbase_reg_read(kbdev, JOB_CONTROL_REG(JOB_IRQ_STATUS), NULL);
++#endif
+ 
+ #ifdef CONFIG_MALI_DEBUG
+ 	if (!kbdev->pm.driver_ready_for_irqs)
+@@ -2368,9 +2397,16 @@
+ 
+ 	int inited = 0;
+ 
+-	//custom_trace start
++#ifdef _TSK_CUSTOM_
+ 	kbdev->nr_ctx_id = 0;
+-	//custom_trace end
++#endif
++#ifdef _TSK_CUSTOM_SNAP_
++	init_snapshot_ctx(kbdev);
++	kbdev->snap_granularity = BASE_SNAP_GRANULARITY;//5MB
++#endif
++#ifdef _TSK_CUSTOM_PROC_
++	kbase_mem_proc_init(kbdev);
++#endif
+ 
+ 	dev_set_drvdata(kbdev->dev, kbdev);
+ 
+@@ -2814,6 +2850,10 @@
+ 	if (!kbdev)
+ 		return -ENODEV;
+ 
++#ifdef _TSK_CUSTOM_PROC_
++	kbase_mem_proc_exit();
++#endif
++
+ 	return kbase_common_device_remove(kbdev);
+ }
+ 
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_defs.h tsk/drivers/gpu/arm/midgard/mali_kbase_defs.h
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_defs.h	2017-08-18 11:51:55.117668941 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_defs.h	2017-08-18 11:18:55.949174349 +0900
+@@ -217,27 +217,53 @@
+ 
+ typedef struct kbase_jd_atom kbase_jd_atom;
+ 
++#define _TSK_CUSTOM_        
++#ifdef _TSK_CUSTOM_
++typedef struct kbase_jm_slot kbase_jm_slot;
++#include <mali_custom_tsk.h>
++#endif
++
+ struct kbase_ext_res
+ {
+ 	mali_addr64 gpu_address;
+ 	struct kbase_mem_phy_alloc * alloc;
+ };
+ 
++
+ struct kbase_jd_atom {
++#ifdef _TSK_CUSTOM_
++    u64 atom_id;
++#endif
++#ifdef _TSK_CUSTOM_SCHED_
++    unsigned long  sched_stat;
++    spinlock_t run_lock;
++    u32 run_lock_flags;
++    u8 dep_flag;
++#endif
++#ifdef _TSK_CUSTOM_SNAP_
++    u8 nr_param;
++    struct list_head param_list;//확장용도
++    kernel_lparam param;
++    u64 jc_indirect;
++#endif
++#ifdef _TSK_TRACE_PER_KERNEL_
++    u64 nr_spages;
++    ktime_t stimes;
++#endif
++#ifdef _TSK_TRACE_EVICTION_
++    u8 eviction_stat;
++    ktime_t p_delay;
++    ktime_t launch_time;
++    u8 snapc_stat;
++    ktime_t snapc_time;
++    u64 patom[2];
++#endif
+ 	struct work_struct work;
+ 	ktime_t start_timestamp;
+ 
+ 	base_jd_udata udata;
+ 	kbase_context *kctx;
+ 
+-    //costom
+-    ktime_t atom_start, atom_end;
+-    u8 nr_slot;
+-    u64 atom_id;
+-    u32 nr_pages;
+-    u8 dep_flag;
+-    ////////
+-
+ 	struct list_head dep_head[2];
+ 	struct list_head dep_item[2];
+ 	struct kbase_jd_atom *dep_atom[2];
+@@ -350,6 +376,9 @@
+ #define BASE_JM_SUBMIT_SLOTS        16
+ #define BASE_JM_SUBMIT_SLOTS_MASK   (BASE_JM_SUBMIT_SLOTS - 1)
+ 
++#ifdef _TSK_CUSTOM_SCHED_
++    struct kbase_device *kbdev;
++#endif
+ 	struct kbase_jd_atom *submitted[BASE_JM_SUBMIT_SLOTS];
+ 
+ 	kbase_context *last_context;
+@@ -570,6 +599,9 @@
+ struct kbase_device {
+ 	/** jm_slots is protected by kbasep_js_device_data::runpool_irq::lock */
+ 	kbase_jm_slot jm_slots[BASE_JM_MAX_NR_SLOTS];
++#ifdef _TSK_CUSTOM_SCHED_
++	kbase_jm_slot preempt_slot;
++#endif
+ 	s8 slot_submit_count_irq[BASE_JM_MAX_NR_SLOTS];
+ 
+ 	struct list_head entry;
+@@ -775,10 +807,31 @@
+ 	 */
+ 	mali_bool force_replay_random;
+ #endif
+-
+-    //custom_trace start
++#ifdef _TSK_CUSTOM_                
+     u32 nr_ctx_id;
+-    //custom_trace end
++#endif
++#ifdef _TSK_CUSTOM_SNAP_
++    struct snapshot_kthreads snapshot_ctx;
++    u32 snap_granularity;
++#endif
++#ifdef _TSK_CUSTOM_PROC_
++    struct list_head proc_ctx_list;
++#endif
++#ifdef _TSK_TRACE_EVAL_
++    ktime_t kernel_time_end;
++#endif
++#ifdef _TSK_TRACE_PER_KERNEL_
++    ktime_t kernel_time_start;
++    ktime_t kernel_time_end;
++#endif
++#ifdef _TSK_CUSTOM_SCHED_
++    u8 run_evict;
++#endif
++#ifdef _TSK_TRACE_EVICTION_
++    u8 sw_trace;
++    //for running job eviction
++    ktime_t eviction_time;
++#endif
+ };
+ 
+ struct kbase_context {
+@@ -846,21 +899,41 @@
+ #ifdef CONFIG_MALI_TRACE_TIMELINE
+ 	kbase_trace_kctx_timeline timeline;
+ #endif
+-    //custom_trace start
+-    struct task_struct *task;
+-    ktime_t app_start, app_end;
+-    ktime_t ktime_start, ktime_end;
+-    ktime_t last_atom_end;
+-    ktime_t total_atom_runtime;
+-    int mem_count;
+-    int kernel_count;
+ 
++#ifdef _TSK_CUSTOM_                     
+     u32 ctx_id;
+     u64 nr_atom_id;
++    u8 is_cl;
++    u32 nr_reg_id;
++#endif
++#ifdef _TSK_CUSTOM_SCHED_
++    atomic_t process_preempt;
+     int nr_dep_job;
+-    //custom_trace end
+-
++#endif
++#ifdef _TSK_CUSTOM_SNAP_
++    spinlock_t snap_lock;
++#endif 
++#ifdef _TSK_CUSTOM_PROC_                
++    struct list_head proc_ctx_list_node;
++#endif
++#ifdef CONFIG_GPU_TRACEPOINTS
++    struct task_struct *task;
++    u8 is_micro;
+ 
++#endif
++#ifdef _TSK_TRACE_EVAL_
++    u32 nr_kernel;
++    u32 nr_spages;
++    u32 nr_mpages;
++    u32 nr_preempt;
++
++	ktime_t ttimes;
++    ktime_t stimes;
++    ktime_t mtimes;
++    
++    ktime_t kernel_time_total;
++    ktime_t kernel_time_start;
++#endif
+ };
+ 
+ typedef enum kbase_reg_access_type {
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_device.c tsk/drivers/gpu/arm/midgard/mali_kbase_device.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_device.c	2017-08-18 11:51:55.117668941 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_device.c	2017-08-18 11:18:55.949174349 +0900
+@@ -369,14 +369,22 @@
+ 	if (val & GPU_FAULT)
+ 		kbase_report_gpu_fault(kbdev, val & MULTIPLE_GPU_FAULTS);
+ 
+-	if (val & RESET_COMPLETED)
++	if (val & RESET_COMPLETED){
++#ifdef CONFIG_GPU_TRACEPOINTS                                                                                                
++		//trace_gpu_custom("gpu reset completed", ktime_to_ns(ktime_get()), 0, 0, (u32)0, (u32)0);
++#endif
+ 		kbase_pm_reset_done(kbdev);
++	}
+ 
+ 	if (val & PRFCNT_SAMPLE_COMPLETED)
+ 		kbase_instr_hwcnt_sample_done(kbdev);
+ 
+-	if (val & CLEAN_CACHES_COMPLETED)
++	if (val & CLEAN_CACHES_COMPLETED){
++#ifdef CONFIG_GPU_TRACEPOINTS                                                                           
++		//trace_gpu_custom("gpu cache clean completed", ktime_to_ns(ktime_get()), 0, 0, (u32)0, (u32)0);
++#endif
+ 		kbase_clean_caches_done(kbdev);
++	}
+ 
+ 	KBASE_TRACE_ADD(kbdev, CORE_GPU_IRQ_CLEAR, NULL, NULL, 0u, val);
+ 	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_IRQ_CLEAR), val, NULL);
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_jd.c tsk/drivers/gpu/arm/midgard/mali_kbase_jd.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_jd.c	2017-08-18 11:51:55.118668934 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_jd.c	2017-08-18 11:18:55.950174342 +0900
+@@ -70,7 +70,7 @@
+ {
+ 	kbase_context *kctx = katom->kctx;
+ 	KBASE_DEBUG_ASSERT(katom->status != KBASE_JD_ATOM_STATE_UNUSED);
+-
++	        //if(!(katom->core_req & BASE_JD_REQ_SOFT_JOB)))
+ 	if ((katom->core_req & BASEP_JD_REQ_ATOM_TYPE) == BASE_JD_REQ_DEP) {
+ 		/* Dependency only atom */
+ 		katom->status = KBASE_JD_ATOM_STATE_COMPLETED;
+@@ -813,6 +813,7 @@
+ 	return core_req_strings[CORE_REQ_UNKNOWN];
+ }*/
+ #endif
++
+ mali_bool jd_submit_atom(kbase_context *kctx,
+ 			 const base_jd_atom_v2 *user_atom,
+ 			 kbase_jd_atom *katom)
+@@ -822,6 +823,20 @@
+ 	int queued = 0;
+ 	int i;
+ 	mali_bool ret;
++#ifdef _TSK_CUSTOM_SNAP_
++	u32 start, init_i, s_i;
++	u32* klc_info;
++	u32* param_end_info;
++	u32 nr_sparam = 0;
++	u64* tmp_sparam;
++	struct kbase_va_region* tmp_sreg;
++#endif
++#ifdef _TSK_CUSTOM_SCHED_
++	katom->sched_stat = SCHED_STAT_INIT;
++	katom->dep_flag = 0;
++	katom->run_lock_flags = 0;
++	spin_lock_init(&katom->run_lock);
++#endif
+ 
+ 	/* Update the TOTAL number of jobs. This includes those not tracked by
+ 	 * the scheduler: 'not ready to run' and 'dependency-only' jobs. */
+@@ -841,6 +856,76 @@
+ 	katom->nice_prio = user_atom->prio;
+ 	katom->atom_flags = 0;
+ 	katom->retry_count = 0;
++#ifdef _TSK_CUSTOM_SNAP_
++	
++	katom->nr_param = 0;
++	INIT_LIST_HEAD(&katom->param_list);
++
++	//rt_skip
++	if(kctx->jctx.sched_info.runpool.policy_ctx.cfs.gpgpu_priority > SCHED_RT_PRIORITY 
++			&& !(katom->core_req & BASE_JD_REQ_SOFT_JOB)){
++		katom->atom_id = kctx->nr_atom_id;
++		kctx->nr_atom_id++;
++
++		katom->param.nr_store = 0;
++		katom->param.nr_restore = 0;
++
++		list_add(&katom->param.param_node, &katom->param_list);
++		for(init_i=0;init_i<20;init_i++){
++			katom->param.param[init_i] = NULL;
++			katom->param.nr_store_pages[init_i]=0;
++			katom->param.nr_restore_pages[init_i]=0;
++		}
++
++	
++		klc_info = (u32*)((u32)katom->jc);
++		katom->jc_indirect = katom->jc;
++
++		if( (*(klc_info+4) & 0x0000000f) == 0x00000005 ){
++			katom->jc_indirect = (u64)(*(klc_info+6));
++			klc_info = (u32*)(*(klc_info+6));
++		}
++
++		param_end_info = (u32*)(*(klc_info+20));
++		nr_sparam =(((*param_end_info & 0x000fff00) >> 8) - (*(klc_info+23) & 0x00000fff))/8;
++		tmp_sparam = (u64*)(*(klc_info+23));
++		
++		//printk(KERN_ALERT"ID[%llu](2) 0x%08x - 0x%08x - %u\n", 
++		//		katom->atom_id, (u32)klc_info, (u32)((*(klc_info+4) & 0xffff0000)>>16), (u32)(((*(klc_info+4) & 0xffff0000)>>16)-0x4000));
++
++
++
++		for(start = 0;start<nr_sparam;start++){
++			init_i =1;
++
++			tmp_sreg = kbase_region_tracker_find_region_enclosing_address(kctx, *(tmp_sparam+start));
++
++			if(tmp_sreg !=NULL){
++				if(tmp_sreg->reg_id != 0){
++
++					for(s_i=0; katom->param.param[s_i] != NULL;s_i++){
++						if(katom->param.param[s_i] == tmp_sreg){
++							init_i = 0;
++							break;
++						}
++					}
++
++					if(init_i){
++						katom->param.param[s_i] = tmp_sreg;
++					}
++
++				}//reg_id != 0
++			}
++		}
++
++	}
++	/*printk(KERN_ALERT"atom : %llu\n",katom->atom_id);
++	for(s_i=0; katom->param.param[s_i] != NULL;s_i++){
++		printk(KERN_ALERT" rid : %u\n",katom->param.param[s_i]->reg_id);
++	}*/
++
++
++#endif
+ #ifdef CONFIG_KDS
+ 	/* Start by assuming that the KDS dependencies are satisfied,
+ 	 * kbase_jd_pre_external_resources will correct this if there are dependencies */
+@@ -848,12 +933,6 @@
+ 	katom->kds_rset = NULL;
+ #endif				/* CONFIG_KDS */
+ 
+-	//custom_trace start
+-	katom->atom_id = kctx->nr_atom_id;
+-	katom->nr_pages = 0;
+-	kctx->nr_atom_id++;
+-	//custom_trace end
+-
+ 	/* Add dependencies */
+ 	for (i = 0; i < 2; i++) {
+ 		int dep_atom_number = user_atom->pre_dep[i];
+@@ -893,15 +972,19 @@
+ 				list_add_tail(&katom->dep_item[i], &dep_atom->dep_head[i]);
+ 				katom->dep_atom[i] = dep_atom;
+ 				queued = 1;
+-				//custom_trace start
++#ifdef _TSK_CUSTOM_SCHED_
+ 				if((katom->core_req & BASE_JD_REQ_ONLY_COMPUTE)){
+ 					kctx->nr_dep_job++;
+ 					katom->dep_flag = 1;
+ 				}
+-				//custom_trace end
++#endif
+ 			}
+ 		}
+ 	}
++#ifdef _TSK_TRACE_EVAL_                                                                                            
++	if(!(katom->core_req & BASE_JD_REQ_SOFT_JOB))                                                                    
++		katom->kctx->nr_kernel++; 
++#endif
+ 
+ 	/* These must occur after the above loop to ensure that an atom that
+ 	 * depends on a previous atom with the same number behaves as expected */
+@@ -1219,8 +1302,9 @@
+ 		kbasep_js_set_job_retry_submit_slot(katom, 1);
+ 	}
+ 
+-	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8316))
++	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8316)){
+ 		kbase_as_poking_timer_release_atom(kbdev, kctx, katom);
++	}
+ 
+ 	/* Release cores this job was using (this might power down unused cores, and
+ 	 * cause extra latency if a job submitted here - such as depenedent jobs -
+@@ -1265,7 +1349,11 @@
+ 		mutex_unlock(&js_kctx_info->ctx.jsctx_mutex);
+ 		/* jd_done_nolock() requires the jsctx_mutex lock to be dropped */
+ 
++#ifdef _TSK_CUSTOM_SCHED_
++		need_to_try_schedule_context = sc_resched(katom);
++#else
+ 		need_to_try_schedule_context = jd_done_nolock(katom);
++#endif
+ 
+ 		/* This ctx is already scheduled in, so return value guarenteed FALSE */
+ 		KBASE_DEBUG_ASSERT(need_to_try_schedule_context == MALI_FALSE);
+@@ -1384,7 +1472,7 @@
+ 	KBASE_DEBUG_ASSERT(0 == object_is_on_stack(&katom->work));
+ 	INIT_WORK(&katom->work, jd_done_worker);
+ 	//queue_work(kctx->jctx.job_done_wq, &katom->work);
+-	queue_work_on(6, kctx->jctx.job_done_wq, &katom->work);
++	queue_work_on(6,kctx->jctx.job_done_wq, &katom->work);
+ }
+ 
+ KBASE_EXPORT_TEST_API(kbase_jd_done)
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_jm.c tsk/drivers/gpu/arm/midgard/mali_kbase_jm.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_jm.c	2017-08-18 11:51:55.118668934 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_jm.c	2017-08-18 11:18:55.950174342 +0900
+@@ -42,15 +42,18 @@
+ static void kbasep_try_reset_gpu_early(kbase_device *kbdev);
+ 
+ #ifdef CONFIG_GPU_TRACEPOINTS
+-/*
+-static char *kbasep_make_job_slot_string(int js, char *js_string)
++/*static char *kbasep_make_job_slot_string(int js, char *js_string)
+ {
+ 	sprintf(js_string, "job_slot_%i", js);
+ 	return js_string;
+ }*/
+ #endif
+ 
++#ifdef _TSK_CUSTOM_SCHED_
++void kbase_job_hw_submit(kbase_device *kbdev, kbase_jd_atom *katom, int js)
++#else
+ static void kbase_job_hw_submit(kbase_device *kbdev, kbase_jd_atom *katom, int js)
++#endif
+ {
+ 	kbase_context *kctx;
+ 	u32 cfg;
+@@ -131,24 +134,17 @@
+ 	kbase_trace_mali_job_slots_event(GATOR_MAKE_EVENT(GATOR_JOB_SLOT_START, js), kctx, kbase_jd_atom_id(kctx, katom)); 
+ #endif				/* CONFIG_MALI_GATOR_SUPPORT */
+ #ifdef CONFIG_GPU_TRACEPOINTS
+-	
+ 	//if (kbasep_jm_nr_jobs_submitted(&kbdev->jm_slots[js]) == 1)
+ 	//{
+ 		/* If this is the only job on the slot, trace it as starting */
+ 		//char js_string[16];
+ 		//trace_gpu_sched_switch(kbasep_make_job_slot_string(js, js_string), ktime_to_ns(katom->start_timestamp), (u32)katom->kctx, 0, katom->work_id);
+ 	//	kbdev->jm_slots[js].last_context = katom->kctx;
+-	
+ 	//}
+ #endif
+ 	kbase_timeline_job_slot_submit(kbdev, kctx, katom, js);
+ 
+ 	kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), JSn_COMMAND_START, katom->kctx);
+-
+-	//custom_trace
+-	katom->kctx->kernel_count++;
+-	katom->atom_start = ktime_get();
+-	katom->nr_slot = kbasep_jm_nr_jobs_submitted(&kbdev->jm_slots[js]);
+ }
+ 
+ void kbase_job_submit_nolock(kbase_device *kbdev, kbase_jd_atom *katom, int js)
+@@ -168,7 +164,36 @@
+ 	 * queue, which I hope will be enough...
+ 	 */
+ 	kbasep_jm_enqueue_submit_slot(&jm_slots[js], katom);
++
++#ifdef _TSK_CUSTOM_SCHED_
++
++	if(jm_slots[js].submitted[jm_slots[js].submitted_head & 15] == katom){
++		
++		struct snapshot_kthread_context *sctx;
++		
++		if(katom->sched_stat & SCHED_STAT_PCER){
++			kbdev->snapshot_ctx.skthread_head ^= 1;
++			katom->sched_stat &= ~SCHED_STAT_PCER;
++		}
++
++		//trace	
++
++		//앞서 kthread swap될수 있으므로 이후 처리할것.
++		sctx = &kbdev->snapshot_ctx.kthread_ctx[kbdev->snapshot_ctx.skthread_head];
++		if(katom->kctx->jctx.sched_info.runpool.policy_ctx.cfs.gpgpu_priority == SCHED_RT_PRIORITY){
++
++			katom->sched_stat |= SCHED_STAT_RUN;
++			sc_hw_submit(kbdev, katom, js);
++		}else{
++			katom->sched_stat |= SCHED_STAT_SNAP;
++			sctx->katom = katom;
++			wake_up_interruptible(&sctx->snap_wqueue);
++			//submit_snapshot((int)kbdev->snapshot_ctx.skthread_head, sctx);
++		}
++	}
++#else
+ 	kbase_job_hw_submit(kbdev, katom, js);
++#endif
+ }
+ 
+ void kbase_job_done_slot(kbase_device *kbdev, int s, u32 completion_code, u64 job_tail, ktime_t *end_timestamp)
+@@ -177,6 +202,10 @@
+ 	kbase_jd_atom *katom;
+ 	mali_addr64 jc_head;
+ 	kbase_context *kctx;
++#ifdef _TSK_CUSTOM_SCHED_
++	kbase_jd_atom *head_slot_atom;
++	struct snapshot_kthread_context *sctx = &kbdev->snapshot_ctx.kthread_ctx[kbdev->snapshot_ctx.skthread_head];
++#endif
+ 
+ 	KBASE_DEBUG_ASSERT(kbdev);
+ 
+@@ -191,6 +220,29 @@
+ 	slot = &kbdev->jm_slots[s];
+ 	katom = kbasep_jm_dequeue_submit_slot(slot);
+ 
++#ifdef _TSK_CUSTOM_SCHED_
++if(slot->submitted_nr){
++	head_slot_atom = slot->submitted[slot->submitted_head & 15];
++
++	//run preempt 되어 들어온 job이면 현재 kthread의 sched_stat SNAP->RUN 으로 변경중에 동시 접근 될 수 있다.
++	//하지만 01->10 이 되는 것이므로 사실상 동일한 결과가 된다.
++	if(!(head_slot_atom->sched_stat & (SCHED_STAT_SNAP | SCHED_STAT_RUN))){
++			if(head_slot_atom->kctx->jctx.sched_info.runpool.policy_ctx.cfs.gpgpu_priority == SCHED_RT_PRIORITY){
++
++				head_slot_atom->sched_stat |= SCHED_STAT_RUN;
++				sc_hw_submit(kbdev, head_slot_atom, 1);
++
++			}else{
++				head_slot_atom->sched_stat |= SCHED_STAT_SNAP;
++				sctx->katom = head_slot_atom;
++				wake_up_interruptible(&sctx->snap_wqueue);
++				//submit_snapshot((int)kbdev->snapshot_ctx.skthread_head, sctx);
++			}
++
++	}
++}
++#endif
++
+ 	/* If the katom completed is because it's a dummy job for HW workarounds, then take no further action */
+ 	if (kbasep_jm_is_dummy_workaround_job(kbdev, katom)) {
+ 		KBASE_TRACE_ADD_SLOT_INFO(kbdev, JM_JOB_DONE, NULL, NULL, 0, s, completion_code);
+@@ -200,19 +252,6 @@
+ 	jc_head = katom->jc;
+ 	kctx = katom->kctx;
+ 
+-	//custom_trace start
+-	katom->atom_end = ktime_get();
+-	if(katom->nr_slot == 1){
+-		//trace_gpu_custom("Job Done", ktime_to_ns(ktime_sub(katom->atom_end, katom->atom_start)), kctx->ctx_id, katom->atom_id, katom->nr_pages, katom->nr_slot);
+-		katom->kctx->total_atom_runtime = ktime_add(katom->kctx->total_atom_runtime, ktime_sub(katom->atom_end, katom->atom_start));
+-	}else if(katom->nr_slot == 2){
+-		//trace_gpu_custom("Job Done", ktime_to_ns(ktime_sub(katom->atom_end, kctx->last_atom_end)), kctx->ctx_id, katom->atom_id, katom->nr_pages, katom->nr_slot);
+-		katom->kctx->total_atom_runtime = ktime_add(katom->kctx->total_atom_runtime, ktime_sub(katom->atom_end, kctx->last_atom_end));
+-	}
+-
+-	katom->kctx->last_atom_end = katom->atom_end;
+-	//custom_trace end
+-
+ 	KBASE_TRACE_ADD_SLOT_INFO(kbdev, JM_JOB_DONE, kctx, katom, jc_head, s, completion_code);
+ 
+ 	if (completion_code != BASE_JD_EVENT_DONE && completion_code != BASE_JD_EVENT_STOPPED) {
+@@ -248,14 +287,21 @@
+ 		kbase_jd_atom *katom;
+ 		char js_string[16];
+ 		katom = kbasep_jm_peek_idx_submit_slot(slot, 0);        // The atom in the HEAD 
+-		//trace_gpu_sched_switch(kbasep_make_job_slot_string(s, js_string), ktime_to_ns(*end_timestamp), (u32)katom->kctx, 0, katom->work_id);
++		trace_gpu_sched_switch(kbasep_make_job_slot_string(s, js_string), ktime_to_ns(*end_timestamp), (u32)katom->kctx, 0, katom->work_id);
+ 		slot->last_context = katom->kctx;
+ 	} else {
+ 		char js_string[16];
+-		//trace_gpu_sched_switch(kbasep_make_job_slot_string(s, js_string), ktime_to_ns(ktime_get()), 0, 0, 0);
++		trace_gpu_sched_switch(kbasep_make_job_slot_string(s, js_string), ktime_to_ns(ktime_get()), 0, 0, 0);
+ 		slot->last_context = 0;
+ 	}*/
+ #endif
++
++#ifdef CONFIG_GPU_TRACEPOINTS
++/*	if(katom->sched_stat & SCHED_STAT_DONE){
++		katom->end = ktime_get();
++		trace_gpu_custom("Job Done", ktime_to_ns(ktime_sub(katom->end, katom->start)), kctx->ctx_id, katom->atom_id, (u32)katom->kctx->nr_dep_job, (u32)katom->sched_stat);
++	}*/
++#endif  
+ 	kbase_jd_done(katom, s, end_timestamp, KBASE_JS_ATOM_DONE_START_NEW_ATOMS);
+ }
+ 
+@@ -300,6 +346,9 @@
+ {
+ 	unsigned long flags;
+ 	int i;
++#ifdef _TSK_CUSTOM_SCHED_
++	int ret;
++#endif
+ 	u32 count = 0;
+ 	ktime_t end_timestamp = ktime_get();
+ 	kbasep_js_device_data *js_devdata;
+@@ -340,8 +389,13 @@
+ 			u32 active;
+ 			u32 completion_code = BASE_JD_EVENT_DONE;	/* assume OK */
+ 			u64 job_tail = 0;
++#ifdef _TSK_CUSTOM_SCHED_
++			ret = sc_is_preempt(slot);
+ 
++			if (failed & (1u << i) && !ret){// sc_is_preempt(slot)){
++#else
+ 			if (failed & (1u << i)) {
++#endif
+ 				/* read out the job slot status code if the job slot reported failure */
+ 				completion_code = kbase_reg_read(kbdev, JOB_SLOT_REG(i, JSn_STATUS), NULL);
+ 
+@@ -362,6 +416,7 @@
+ 				}
+ 			}
+ 
++			
+ 			kbase_reg_write(kbdev, JOB_CONTROL_REG(JOB_IRQ_CLEAR), done & ((1 << i) | (1 << (i + 16))), NULL);
+ 			active = kbase_reg_read(kbdev, JOB_CONTROL_REG(JOB_IRQ_JS_STATE), NULL);
+ 
+@@ -398,11 +453,14 @@
+ 			}
+ 
+ 			KBASE_LOG(2, kbdev->dev, "Job ended with status 0x%08X\n", completion_code);
+-
++			
++#ifdef _TSK_CUSTOM_SCHED_
++			nr_done = sc_active_jobs(slot);
++#else
+ 			nr_done = kbasep_jm_nr_jobs_submitted(slot);
+ 			nr_done -= (active >> i) & 1;
+ 			nr_done -= (active >> (i + 16)) & 1;
+-
++#endif
+ 			if (nr_done <= 0) {
+ 				dev_warn(kbdev->dev, "Spurious interrupt on slot %d", i);
+ 				goto spurious;
+@@ -410,6 +468,8 @@
+ 
+ 			count += nr_done;
+ 
++
++
+ 			while (nr_done) {
+ 				if (nr_done == 1) {
+ 					kbase_job_done_slot(kbdev, i, completion_code, job_tail, &end_timestamp);
+@@ -475,7 +535,11 @@
+ 	return hard_stops_allowed;
+ }
+ 
++#ifdef _TSK_CUSTOM_SCHED_
++void kbasep_job_slot_soft_or_hard_stop_do_action(kbase_device *kbdev, int js, u32 action, u16 core_reqs, kbase_jd_atom * target_katom )
++#else
+ static void kbasep_job_slot_soft_or_hard_stop_do_action(kbase_device *kbdev, int js, u32 action, u16 core_reqs, kbase_jd_atom * target_katom )
++#endif
+ {
+ 	kbase_context *kctx = target_katom->kctx;
+ #if KBASE_TRACE_ENABLE
+@@ -710,16 +774,24 @@
+ 	
+ 		if (JM_JOB_IS_CURRENT_JOB_INDEX(jobs_submitted - i)) {
+ 			/* The last job in the slot, check if there is a job in the next register */
+-			if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), NULL) == 0)
++			if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), NULL) == 0){
++				//job이 수행중일 때
+ 				kbasep_job_slot_soft_or_hard_stop_do_action(kbdev, js, action, core_reqs, katom);
++			}
+ 			else {
++				//잡이 hw_submit 됬지만, 아직 수행안되고 대기 중일 때
+ 				/* The job is in the next registers */
+ 				beenthere(kctx, "clearing job from next registers on slot %d", js);
+ 				kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), JSn_COMMAND_NOP, NULL);
++				//수행 요청 클리어
+ 				/* Check to see if we did remove a job from the next registers */
+-				if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), NULL) != 0 || kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), NULL) != 0) {
++				if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), NULL) != 0 || 
++						kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), NULL) != 0) {
++					//잡 수행 요청 클리어했을때 만약 레지스터에 값이 남아있다면, 정상 클리어 한것이다.
+ 					/* The job was successfully cleared from the next registers, requeue it */
+-					kbase_jd_atom *dequeued_katom = kbasep_jm_dequeue_tail_submit_slot(slot);
++					kbase_jd_atom *dequeued_katom;
++					dequeued_katom = kbasep_jm_dequeue_tail_submit_slot(slot);
++
+ 					KBASE_DEBUG_ASSERT(dequeued_katom == katom);
+ 					jobs_submitted--;
+ 
+@@ -737,6 +809,7 @@
+ 					/* Complete the job, indicate it took no time, but don't submit any more at this point */
+ 					kbase_jd_done(dequeued_katom, js, NULL, KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT);
+ 				} else {
++					//잡 수행 요청 클리어했을 때 만약 레지스터에 값이 남아있지 않다면 이건 이미 시기를 놓쳐서 수행상태로 들어간것.
+ 					/* The job transitioned into the current registers before we managed to evict it,
+ 					 * in this case we fall back to soft/hard-stopping the job */
+ 					beenthere(kctx, "missed job in next register, soft/hard-stopping slot %d", js);
+@@ -751,7 +824,14 @@
+ 			 * has support for this using job chain disambiguation or we need to evict the job
+ 			 * from the next registers first to ensure we can safely stop the one pointed to by
+ 			 * the head registers. */
++
++
++#ifdef _TSK_CUSTOM_SCHED_
++			//slot에 2개의 job이 들어 있는 경우 
++			if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), NULL) != 0) {
++#else
+ 			if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), NULL) != 0) {
++#endif
+ 				kbase_jd_atom *check_next_atom;
+ 				/* It is - we should remove that job and soft/hard-stop the slot */
+ 
+@@ -780,10 +860,13 @@
+ 					kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), JSn_COMMAND_NOP, NULL);
+ 
+ 					/* Check to see if we did remove a job from the next registers */
+-					if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), NULL) != 0 || kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), NULL) != 0) {
++					if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), NULL) != 0 || 
++							kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), NULL) != 0) {
+ 						/* We did remove a job from the next registers, requeue it */
+-						kbase_jd_atom *dequeued_katom = kbasep_jm_dequeue_tail_submit_slot(slot);
++						kbase_jd_atom *dequeued_katom;
++					        dequeued_katom = kbasep_jm_dequeue_tail_submit_slot(slot);
+ 						KBASE_DEBUG_ASSERT(dequeued_katom != NULL);
++						
+ 						jobs_submitted--;
+ 
+ 						/* Set the next registers to NULL */
+@@ -800,7 +883,6 @@
+ 						continue;
+ 					}
+ 				}
+-
+ 				/* Next is now free, so we can soft/hard-stop the slot */
+ 				beenthere(kctx, "soft/hard-stopped slot %d (there was a job in next which was successfully cleared)\n", js);
+ 				kbasep_job_slot_soft_or_hard_stop_do_action(kbdev, js, action, core_reqs, katom);
+@@ -811,6 +893,7 @@
+ 		}
+ 	}
+ 
++
+ 	KBASE_TIMELINE_TRY_SOFT_STOP(kctx, js, 0);
+ }
+ 
+@@ -832,9 +915,12 @@
+ 	/* Invalidate all jobs in context, to prevent re-submitting */
+ 	for (i = 0; i < BASE_JD_ATOM_COUNT; i++)
+ 		kctx->jctx.atoms[i].event_code = BASE_JD_EVENT_JOB_CANCELLED;
++	
++
++	for (i = 0; i < kbdev->gpu_props.num_job_slots; i++){
+ 
+-	for (i = 0; i < kbdev->gpu_props.num_job_slots; i++)
+ 		kbase_job_slot_hardstop(kctx, i, NULL);
++	}
+ 
+ 	spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
+ }
+@@ -853,6 +939,7 @@
+ 	js_devdata = &kbdev->js_data;
+ 	js_kctx_info = &kctx->jctx.sched_info;
+ 
++
+ 	/*
+ 	 * Critical assumption: No more submission is possible outside of the
+ 	 * workqueue. This is because the OS *must* prevent U/K calls (IOCTLs)
+@@ -950,8 +1037,9 @@
+ 		KBASE_LOG(2, kbdev->dev, "Zap: Ctx %p Kill Any Running jobs", kctx);
+ 		/* Cancel any remaining running jobs for this kctx - if any. Submit is disallowed
+ 		 * which takes effect immediately, so no more new jobs will appear after we do this.  */
+-		for (i = 0; i < kbdev->gpu_props.num_job_slots; i++)
++		for (i = 0; i < kbdev->gpu_props.num_job_slots; i++){
+ 			kbase_job_slot_hardstop(kctx, i, NULL);
++		}
+ 
+ 		spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
+ 		mutex_unlock(&js_kctx_info->ctx.jsctx_mutex);
+@@ -975,8 +1063,17 @@
+ 	int i;
+ 	KBASE_DEBUG_ASSERT(kbdev);
+ 
++#ifdef _TSK_CUSTOM_SCHED_
++	for (i = 0; i < kbdev->gpu_props.num_job_slots; i++){
++		kbdev->jm_slots[i].kbdev = kbdev;
++		kbasep_jm_init_submit_slot(&kbdev->jm_slots[i]);
++	}
++	kbdev->preempt_slot.kbdev = kbdev;
++	kbasep_jm_init_submit_slot(&kbdev->preempt_slot);
++#else
+ 	for (i = 0; i < kbdev->gpu_props.num_job_slots; i++)
+ 		kbasep_jm_init_submit_slot(&kbdev->jm_slots[i]);
++#endif
+ 
+ 	return MALI_ERROR_NONE;
+ }
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_jm.h tsk/drivers/gpu/arm/midgard/mali_kbase_jm.h
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_jm.h	2017-08-18 11:51:55.118668934 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_jm.h	2017-08-18 11:18:55.950174342 +0900
+@@ -29,6 +29,11 @@
+ #include <mali_kbase_debug.h>
+ #include <linux/atomic.h>
+ 
++#ifdef _TSK_CUSTOM_SCHED_
++void kbase_job_hw_submit(kbase_device *kbdev, kbase_jd_atom *katom, int js);
++void kbasep_job_slot_soft_or_hard_stop_do_action(kbase_device *kbdev, int js, u32 action, u16 core_reqs, kbase_jd_atom * target_katom );
++#endif
++
+ /**
+  * @addtogroup base_api
+  * @{
+@@ -61,6 +66,7 @@
+  */
+ static INLINE mali_bool kbasep_jm_is_submit_slots_free(kbase_device *kbdev, int js, kbase_context *kctx)
+ {
++
+ 	KBASE_DEBUG_ASSERT(kbdev != NULL);
+ 	KBASE_DEBUG_ASSERT(0 <= js && js < kbdev->gpu_props.num_job_slots);
+ 
+@@ -68,7 +74,7 @@
+ 		/* The GPU is being reset - so prevent submission */
+ 		return MALI_FALSE;
+ 	}
+-
++    
+ 	return (mali_bool) (kbasep_jm_is_js_free(kbdev, js, kctx)
+ 			    && kbdev->jm_slots[js].submitted_nr < (BASE_JM_SUBMIT_SLOTS - 2));
+ }
+@@ -101,10 +107,23 @@
+ /**
+  * Pop front of the submitted
+  */
++#ifdef _TSK_CUSTOM_SCHED_
++static INLINE kbase_jd_atom *kbasep_jm_dequeue_submit_slot(kbase_jm_slot *pslot)
++#else
+ static INLINE kbase_jd_atom *kbasep_jm_dequeue_submit_slot(kbase_jm_slot *slot)
++#endif
+ {
+ 	u8 pos;
+ 	kbase_jd_atom *katom;
++#ifdef _TSK_CUSTOM_SCHED_
++    kbase_device *kbdev = pslot->kbdev;
++    kbase_jm_slot *slot;
++    if(kbdev->preempt_slot.submitted_nr)
++        slot = &kbdev->preempt_slot;
++    else
++        slot = pslot;
++
++#endif
+ 
+ 	pos = slot->submitted_head & BASE_JM_SUBMIT_SLOTS_MASK;
+ 	katom = slot->submitted[pos];
+@@ -114,6 +133,9 @@
+ 	/* rotate the buffers */
+ 	slot->submitted_head = (slot->submitted_head + 1) & BASE_JM_SUBMIT_SLOTS_MASK;
+ 	slot->submitted_nr--;
++#ifdef _TSK_CUSTOM_SCHED_
++    katom->sched_stat &= ~SCHED_STAT_SLOT;
++#endif
+ 
+ 	KBASE_LOG(2, katom->kctx->kbdev->dev, "katom %p new head %u", (void *)katom, (unsigned int)slot->submitted_head);
+ 
+@@ -130,6 +152,10 @@
+ 
+ 	pos = (slot->submitted_head + slot->submitted_nr) & BASE_JM_SUBMIT_SLOTS_MASK;
+ 
++#ifdef _TSK_CUSTOM_SCHED_
++    slot->submitted[pos]->sched_stat &= ~SCHED_STAT_SLOT;
++#endif
++
+ 	return slot->submitted[pos];
+ }
+ 
+@@ -150,6 +176,9 @@
+ 
+ 	pos = (slot->submitted_head + nr) & BASE_JM_SUBMIT_SLOTS_MASK;
+ 	slot->submitted[pos] = katom;
++#ifdef _TSK_CUSTOM_SCHED_
++    katom->sched_stat |= SCHED_STAT_SLOT;
++#endif
+ }
+ 
+ /**
+@@ -187,6 +216,7 @@
+  */
+ void kbase_job_submit_nolock(kbase_device *kbdev, kbase_jd_atom *katom, int js);
+ 
++
+ /**
+  * @brief Complete the head job on a particular job-slot
+  */
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_js.c tsk/drivers/gpu/arm/midgard/mali_kbase_js.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_js.c	2017-08-18 11:51:55.118668934 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_js.c	2017-08-18 11:18:55.950174342 +0900
+@@ -390,6 +390,7 @@
+ 	if (js_devdata->nr_user_contexts_running == 0)
+ 		return; /* No contexts present - the GPU might be powered off, so just return */
+ 
++
+ 	for (js = 0; js < kbdev->gpu_props.num_job_slots; ++js)
+ 		kbasep_js_try_run_next_job_on_slot_nolock(kbdev, js);
+ }
+@@ -853,6 +854,9 @@
+ 	kbase_device *kbdev;
+ 	kbasep_js_device_data *js_devdata;
+ 	kbasep_js_policy *js_policy;
++#ifdef _TSK_CUSTOM_SCHED_
++	u32 skip_by_preemption;
++#endif
+ 
+ 	mali_bool policy_queue_updated = MALI_FALSE;
+ 
+@@ -878,6 +882,17 @@
+ 	mutex_lock(&js_devdata->runpool_mutex);
+ 	KBASE_TRACE_ADD_REFCOUNT(kbdev, JS_ADD_JOB, kctx, atom, atom->jc, kbasep_js_trace_get_refcnt(kbdev, kctx));
+ 
++#ifdef _TSK_CUSTOM_SCHED_
++	skip_by_preemption = atom->sched_stat & SCHED_STAT_PMASK;
++#ifdef CONFIG_GPU_TRACEPOINTS
++	/*if(skip_by_preemption)
++		trace_gpu_custom("preempted job js add", ktime_to_ns(ktime_get()), kctx->ctx_id, atom->atom_id, (u32)atom->sched_stat, (u32)list_empty(&atom->dep_head[0]));
++	else
++		trace_gpu_custom("job js add", ktime_to_ns(ktime_get()), kctx->ctx_id, atom->atom_id, (u32)atom->sched_stat, (u32)list_empty(&atom->dep_head[0]));
++	*/	
++#endif
++#endif
++
+ 	/* Refcount ctx.nr_jobs */
+ 	KBASE_DEBUG_ASSERT(js_kctx_info->ctx.nr_jobs < U32_MAX);
+ 	++(js_kctx_info->ctx.nr_jobs);
+@@ -895,6 +910,15 @@
+ 	 * parent context gets scheduled */
+ 	kbasep_js_policy_enqueue_job(js_policy, atom);
+ 
++#ifdef _TSK_CUSTOM_SCHED_
++	if(skip_by_preemption){
++		spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
++		mutex_unlock(&js_devdata->runpool_mutex);
++		mutex_unlock(&js_kctx_info->ctx.jsctx_mutex);
++		return 1;
++	}
++#endif
++
+ 	if (js_kctx_info->ctx.is_scheduled != MALI_FALSE) {
+ 		/* Handle an already running context - try to run the new job, in case it
+ 		 * matches requirements that aren't matched by any other job in the Run
+@@ -1314,6 +1338,7 @@
+ 	mutex_unlock(&js_devdata->runpool_mutex);
+ 	if ((release_result & KBASEP_JS_RELEASE_RESULT_WAS_DESCHEDULED) != 0u)
+ 		kbasep_js_runpool_requeue_or_kill_ctx(kbdev, kctx, MALI_TRUE);
++	
+ 
+ 	/* Drop the jsctx_mutex to allow scheduling in a new context */
+ 	mutex_unlock(&js_kctx_info->ctx.jsctx_mutex);
+@@ -1604,11 +1629,16 @@
+ 		/* Keep submitting while there's space to run a job on this job-slot,
+ 		 * and there are jobs to get that match its requirements (see 'break'
+ 		 * statement below) */
++#ifdef _TSK_CUSTOM_SCHED_
++		while (*submit_count < KBASE_JS_MAX_JOB_SUBMIT_PER_SLOT_PER_IRQ) {
++#else
+ 		while (*submit_count < KBASE_JS_MAX_JOB_SUBMIT_PER_SLOT_PER_IRQ && kbasep_jm_is_submit_slots_free(kbdev, js, NULL) != MALI_FALSE) {
++#endif
+ 			kbase_jd_atom *dequeued_atom;
+ 			mali_bool has_job = MALI_FALSE;
+ 
+ 			/* Dequeue a job that matches the requirements */
++
+ 			has_job = kbasep_js_policy_dequeue_job(kbdev, js, &dequeued_atom);
+ 
+ 			if (has_job != MALI_FALSE) {
+@@ -1625,6 +1655,7 @@
+ 				if (cores_ready != MALI_TRUE && dequeued_atom->event_code != BASE_JD_EVENT_PM_EVENT) {
+ 					/* The job can't be submitted until the cores are ready, requeue the job */
+ 					kbasep_js_policy_enqueue_job(&kbdev->js_data.policy, dequeued_atom);
++
+ 					break;
+ 				}
+ 
+@@ -1698,7 +1729,9 @@
+ 	/* Keep submitting while there's space to run a job on this job-slot,
+ 	 * and there are jobs to get that match its requirements (see 'break'
+ 	 * statement below) */
++#ifndef _TSK_CUSTOM_SCHED_
+ 	if (kbasep_jm_is_submit_slots_free(kbdev, js, NULL) != MALI_FALSE) {
++#endif
+ 		/* The caller of this function may not be aware of Ctx Attribute state changes so we
+ 		 * must recheck if the given slot is still valid. Otherwise do not try to run.
+ 		 */
+@@ -1707,6 +1740,7 @@
+ 				kbase_jd_atom *dequeued_atom;
+ 
+ 				/* Dequeue a job that matches the requirements */
++
+ 				has_job = kbasep_js_policy_dequeue_job(kbdev, js, &dequeued_atom);
+ 
+ 				if (has_job != MALI_FALSE) {
+@@ -1717,6 +1751,7 @@
+ 					kbase_context *parent_ctx = dequeued_atom->kctx;
+ 					mali_bool retain_success;
+ 
++
+ 					/* Retain/power up the cores it needs, check if cores are ready */
+ 					cores_ready = kbasep_js_job_check_ref_cores(kbdev, js, dequeued_atom);
+ 
+@@ -1749,10 +1784,15 @@
+ 						kbase_job_submit_nolock(kbdev, dequeued_atom, js);
+ 					}
+ 				}
+-
++#ifdef _TSK_CUSTOM_SCHED_
++			} while (has_job != MALI_FALSE);
++#else
+ 			} while (kbasep_jm_is_submit_slots_free(kbdev, js, NULL) != MALI_FALSE && has_job != MALI_FALSE);
++#endif
+ 		}
++#ifndef _TSK_CUSTOM_SCHED_
+ 	}
++#endif
+ }
+ 
+ void kbasep_js_try_schedule_head_ctx(kbase_device *kbdev)
+@@ -1899,6 +1939,7 @@
+ 	/* Try to run the next job, in case this context has jobs that match the
+ 	 * job slot requirements, but none of the other currently running contexts
+ 	 * do */
++
+ 	kbasep_js_try_run_next_job_nolock(kbdev);
+ 
+ 	/* Transaction complete */
+@@ -2017,6 +2058,7 @@
+ 
+ 	lockdep_assert_held(&js_devdata->runpool_irq.lock);
+ 
++
+ 	/*
+ 	 * Release resources before submitting new jobs (bounds the refcount of
+ 	 * the resource to BASE_JM_SUBMIT_SLOTS)
+@@ -2050,6 +2092,7 @@
+ 	/* Determine whether the parent context's timeslice is up */
+ 	if (kbasep_js_policy_should_remove_ctx(js_policy, parent_ctx) != MALI_FALSE)
+ 		kbasep_js_clear_submit_allowed(js_devdata, parent_ctx);
++	
+ 
+ 	if (done_code & KBASE_JS_ATOM_DONE_START_NEW_ATOMS) {
+ 		/* Submit a new job (if there is one) to help keep the GPU's HEAD and NEXT registers full */
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_js_policy_cfs.c tsk/drivers/gpu/arm/midgard/mali_kbase_js_policy_cfs.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_js_policy_cfs.c	2017-08-18 11:51:55.119668927 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_js_policy_cfs.c	2017-08-18 11:18:55.951174335 +0900
+@@ -588,6 +588,10 @@
+ 	kbasep_js_device_data *js_devdata;
+ 	kbasep_js_policy_cfs *policy_info;
+ 	kbasep_js_policy_cfs_ctx *ctx_info;
++#ifdef _TSK_CUSTOM_SCHED_
++	int base_priority = kctx->jctx.sched_info.runpool.policy_ctx.cfs.gpgpu_priority;
++	struct kbase_context *tmp_ctx;
++#endif
+ 
+ 	KBASE_DEBUG_ASSERT(kbdev != NULL);
+ 	KBASE_DEBUG_ASSERT(katom_ptr != NULL);
+@@ -613,13 +617,52 @@
+ 					KBASE_TRACE_ADD_SLOT(kbdev, JS_POLICY_DEQUEUE_JOB, front_atom->kctx, front_atom, front_atom->jc, job_slot_idx);
+ 				}
+ 				*katom_ptr = list_entry(job_list->next, kbase_jd_atom, sched_info.cfs.list);
++
++#ifdef _TSK_CUSTOM_SCHED_
++				if(!sc_preempt(*katom_ptr))
++					return MALI_FALSE;
++
++				(*katom_ptr)->sched_stat &= ~SCHED_STAT_POOL;
++#endif
++
+ 				list_del(job_list->next);
+ 
+ 				(*katom_ptr)->sched_info.cfs.ticks = 0;
+ 
+ 				/* Put this context at the back of the Run Pool */
++#ifdef _TSK_CUSTOM_SCHED_
++				/*
++				 * runpool에 있는 ctx 중 선택되어 job이 dequeue되었다면
++				 * runpool 내에 같은 우선순위 그룹의 맨 뒤로 이동한다.
++				 * 이것을 통해 같은 우선순위를 가진 ctx에 대해서는 round-robin 스케줄링을 한다.
++				 */
++				if(kctx->jctx.sched_info.runpool.policy_ctx.cfs.list.next != &policy_info->scheduled_ctxs_head){
++				
++				list_for_each_entry(tmp_ctx, &kctx->jctx.sched_info.runpool.policy_ctx.cfs.list, jctx.sched_info.runpool.policy_ctx.cfs.list){
++
++					if(base_priority < tmp_ctx->jctx.sched_info.runpool.policy_ctx.cfs.gpgpu_priority){
++						list_del(&kctx->jctx.sched_info.runpool.policy_ctx.cfs.list);
++						list_add(&kctx->jctx.sched_info.runpool.policy_ctx.cfs.list, 
++								tmp_ctx->jctx.sched_info.runpool.policy_ctx.cfs.list.prev);
++
++						break;
++					}
++
++					if(tmp_ctx->jctx.sched_info.runpool.policy_ctx.cfs.list.next == &policy_info->scheduled_ctxs_head){
++						list_del(&kctx->jctx.sched_info.runpool.policy_ctx.cfs.list);
++						list_add(&kctx->jctx.sched_info.runpool.policy_ctx.cfs.list,
++									&tmp_ctx->jctx.sched_info.runpool.policy_ctx.cfs.list);
++						break;
++					}
++
++
++				}
++
++				}
++#else
+ 				list_del(&kctx->jctx.sched_info.runpool.policy_ctx.cfs.list);
+ 				list_add_tail(&kctx->jctx.sched_info.runpool.policy_ctx.cfs.list, &policy_info->scheduled_ctxs_head);
++#endif
+ 
+ 				return MALI_TRUE;
+ 			}
+@@ -644,9 +687,9 @@
+ 
+ 	KBASE_DEBUG_ASSERT(kbdev != NULL);
+ 	js_devdata = &kbdev->js_data;
+-
++#ifdef _TSK_CUSTOM_SCHED_
+ 	return 0;
+-
++#endif
+ 	/* nr_user_contexts_running is updated with the runpool_mutex. However, the
+ 	 * locking in the caller gives us a barrier that ensures nr_user_contexts is
+ 	 * up-to-date for reading */
+@@ -731,7 +774,6 @@
+ 
+ 				/* Job is Soft-Stoppable */
+ 				if (ticks == soft_stop_ticks) {
+-					printk(KERN_ALERT"soft_stop_ticks\n");
+ 					/* Job has been scheduled for at least js_devdata->soft_stop_ticks ticks.
+ 					 * Soft stop the slot so we can run other jobs.
+ 					 */
+@@ -740,21 +782,26 @@
+ #if KBASE_DISABLE_SCHEDULING_SOFT_STOPS == 0
+ 					kbase_job_slot_softstop(kbdev, s, atom);
+ #endif
++#ifdef _TSK_CUSTOM_SCHED_
++				} else if (0) {
++#else
+ 				} else if (ticks == hard_stop_ticks) {
+-					printk(KERN_ALERT"hard_stop_ticks\n");
++#endif
+ 					/* Job has been scheduled for at least js_devdata->hard_stop_ticks_ss ticks.
+ 					 * It should have been soft-stopped by now. Hard stop the slot.
+ 					 */
+ #if KBASE_DISABLE_SCHEDULING_HARD_STOPS == 0
+ 					dev_warn(kbdev->dev, "JS: Job Hard-Stopped (took more than %lu ticks at %lu ms/tick)", (unsigned long)ticks, (unsigned long)(js_devdata->scheduling_tick_ns / 1000000u));
++					printk(KERN_ALERT"time out - hardstop 1\n");
+ 					kbase_job_slot_hardstop(atom->kctx, s, atom);
+ #endif
+ 				} else if (ticks == gpu_reset_ticks) {
+-					printk(KERN_ALERT"gpu_reset_ticks\n");
+ 					/* Job has been scheduled for at least js_devdata->gpu_reset_ticks_ss ticks.
+ 					 * It should have left the GPU by now. Signal that the GPU needs to be reset.
+ 					 */
++#ifndef _TSK_CUSTOM_SCHED_
+ 					reset_needed = MALI_TRUE;
++#endif
+ 				}
+ #else 				/* !CINSTR_DUMPING_ENABLED */
+ 				/* NOTE: During CINSTR_DUMPING_ENABLED, we use the alternate timeouts, which
+@@ -766,16 +813,15 @@
+ 					 */
+ 					KBASE_LOG(1, kbdev->dev, "Soft-stop");
+ 				} else if (ticks == js_devdata->hard_stop_ticks_nss) {
+-					printk(KERN_ALERT"hard_stop_2_ticks\n");
+ 					/* Job has been scheduled for at least js_devdata->hard_stop_ticks_nss ticks.
+ 					 * Hard stop the slot.
+ 					 */
+ #if KBASE_DISABLE_SCHEDULING_HARD_STOPS == 0
+ 					dev_warn(kbdev->dev, "JS: Job Hard-Stopped (took more than %lu ticks at %lu ms/tick)", (unsigned long)ticks, (unsigned long)(js_devdata->scheduling_tick_ns / 1000000u));
++					printk(KERN_ALERT"time out - hardstop 2\n");
+ 					kbase_job_slot_hardstop(atom->kctx, s, atom);
+ #endif
+ 				} else if (ticks == js_devdata->gpu_reset_ticks_nss) {
+-					printk(KERN_ALERT"gpu_reset_2_ticks\n");
+ 					/* Job has been scheduled for at least js_devdata->gpu_reset_ticks_nss ticks.
+ 					 * It should have left the GPU by now. Signal that the GPU needs to be reset.
+ 					 */
+@@ -885,9 +931,11 @@
+ 	if (policy == SCHED_FIFO || policy == SCHED_RR) {
+ 		ctx_info->process_rt_policy = MALI_TRUE;
+ 		ctx_info->process_priority = (((MAX_RT_PRIO - 1) - current->rt_priority) / 5) - 20;
++		ctx_info->gpgpu_priority = -1*ctx_info->process_priority-40;
+ 	} else {
+ 		ctx_info->process_rt_policy = MALI_FALSE;
+ 		ctx_info->process_priority = (current->static_prio - MAX_RT_PRIO) - 20;
++		ctx_info->gpgpu_priority = ctx_info->process_priority;
+ 	}
+ 
+ 	ctx_info->bag_total_priority = 0;
+@@ -1168,10 +1216,17 @@
+ 	kbasep_js_policy_cfs *policy_info;
+ 	kbasep_js_device_data *js_devdata;
+ 	kbase_device *kbdev;
++#ifdef _TSK_CUSTOM_SCHED_
++	mali_bool scheduled;
++	kbase_context *pos;
++	kbasep_js_policy_cfs_ctx *ctx_info, *runpool_ctx_info;
++	ctx_info = &kctx->jctx.sched_info.runpool.policy_ctx.cfs;
++#endif
+ 
+ 	KBASE_DEBUG_ASSERT(js_policy != NULL);
+ 	KBASE_DEBUG_ASSERT(kctx != NULL);
+ 
++
+ 	policy_info = &js_policy->cfs;
+ 	js_devdata = container_of(js_policy, kbasep_js_device_data, policy);
+ 
+@@ -1185,7 +1240,30 @@
+ 	kbasep_js_debug_check(policy_info, kctx, KBASEP_JS_CHECK_NOTSCHEDULED);
+ 
+ 	/* All enqueued contexts go to the back of the runpool */
++#ifdef _TSK_CUSTOM_SCHED_
++	if(list_empty(&policy_info->scheduled_ctxs_head)){
++		list_add_tail(&kctx->jctx.sched_info.runpool.policy_ctx.cfs.list, &policy_info->scheduled_ctxs_head);
++	}else{
++
++		scheduled = MALI_FALSE;
++		list_for_each_entry(pos, &policy_info->scheduled_ctxs_head, jctx.sched_info.runpool.policy_ctx.cfs.list){
++			runpool_ctx_info = &pos->jctx.sched_info.runpool.policy_ctx.cfs;
++
++			if(runpool_ctx_info->gpgpu_priority > ctx_info->gpgpu_priority){
++			//if(runpool_ctx_info->process_priority > ctx_info->process_priority){
++				list_add(&kctx->jctx.sched_info.runpool.policy_ctx.cfs.list,
++						pos->jctx.sched_info.runpool.policy_ctx.cfs.list.prev);
++				scheduled = MALI_TRUE;
++				break;
++			}
++		}
++		if(!scheduled){
++			list_add_tail(&kctx->jctx.sched_info.runpool.policy_ctx.cfs.list, &policy_info->scheduled_ctxs_head);
++		}
++	}
++#else
+ 	list_add_tail(&kctx->jctx.sched_info.runpool.policy_ctx.cfs.list, &policy_info->scheduled_ctxs_head);
++#endif
+ 
+ 	if (timer_callback_should_run(kbdev) != MALI_FALSE && policy_info->timer_running == MALI_FALSE) {
+ 		hrtimer_start(&policy_info->scheduling_timer, HR_TIMER_DELAY_NSEC(js_devdata->scheduling_tick_ns), HRTIMER_MODE_REL);
+@@ -1354,6 +1432,12 @@
+ 	kbase_context *kctx;
+ 	u32 variants_supported;
+ 	struct list_head *pos;
++#ifdef _TSK_CUSTOM_SCHED_
++	int nr_cur_dep_job = 0;
++	int nr_prev_dep_job = 0;
++	kbase_context *prev_kctx = NULL;
++
++#endif
+ 
+ 	KBASE_DEBUG_ASSERT(kbdev != NULL);
+ 	KBASE_DEBUG_ASSERT(katom_ptr != NULL);
+@@ -1362,6 +1446,7 @@
+ 	js_devdata = &kbdev->js_data;
+ 	policy_info = &js_devdata->policy.cfs;
+ 
++
+ 	/* Get the variants for this slot */
+ 	if (kbdev->gpu_props.num_core_groups > 1 && kbasep_js_ctx_attr_is_attr_on_runpool(kbdev, KBASEP_JS_CTX_ATTR_COMPUTE_ALL_CORES) != MALI_FALSE) {
+ 		/* SS-allcore state, and there's more than one coregroup */
+@@ -1385,11 +1470,30 @@
+ 	/* Second pass through the runpool we consider the non-realtime priority jobs */
+ 	list_for_each(pos, &policy_info->scheduled_ctxs_head) {
+ 		kctx = list_entry(pos, kbase_context, jctx.sched_info.runpool.policy_ctx.cfs.list);
++		
+ 		if (kctx->jctx.sched_info.runpool.policy_ctx.cfs.process_rt_policy == MALI_FALSE) {
++#ifdef _TSK_CUSTOM_SCHED_
++			if(prev_kctx != NULL)
++				if(kctx->jctx.sched_info.runpool.policy_ctx.cfs.gpgpu_priority >
++						prev_kctx->jctx.sched_info.runpool.policy_ctx.cfs.gpgpu_priority){
++					nr_prev_dep_job = nr_cur_dep_job;
++				}
++
++			if(!atomic_read(&kctx->process_preempt) && !nr_prev_dep_job){
++
++				if (dequeue_job(kbdev, kctx, variants_supported, katom_ptr, job_slot_idx)){ 
++					/* Non-realtime policy job matched */
++					return MALI_TRUE;
++				}
++			}
++			nr_cur_dep_job += kctx->nr_dep_job;
++			prev_kctx = kctx;
++#else
+ 			if (dequeue_job(kbdev, kctx, variants_supported, katom_ptr, job_slot_idx)) {
+-				/* Non-realtime policy job matched */
+-				return MALI_TRUE;
++				        /* Non-realtime policy job matched */
++				        return MALI_TRUE;
+ 			}
++#endif
+ 		}
+ 	}
+ 
+@@ -1402,6 +1506,13 @@
+ 	kbasep_js_policy_cfs_job *job_info;
+ 	kbasep_js_policy_cfs_ctx *ctx_info;
+ 	kbase_context *parent_ctx;
++#ifdef _TSK_CUSTOM_SCHED_
++	kbase_jd_atom *pos;
++
++	void *klc_map;                  
++	u32* klc_info;
++	struct kbase_va_region* tmp_reg;
++#endif
+ 
+ 	KBASE_DEBUG_ASSERT(js_policy != NULL);
+ 	KBASE_DEBUG_ASSERT(katom != NULL);
+@@ -1415,13 +1526,47 @@
+ 		kbase_device *kbdev = container_of(js_policy, kbase_device, js_data.policy);
+ 		KBASE_TRACE_ADD(kbdev, JS_POLICY_ENQUEUE_JOB, katom->kctx, katom, katom->jc, 0);
+ 	}
+-	//custom_trace start
++#ifdef _TSK_CUSTOM_SCHED_
++	if(katom->sched_stat & (SCHED_STAT_PSLOT | SCHED_STAT_PSNAP)){
++		atomic_dec(&parent_ctx->process_preempt);
++	}else if(katom->sched_stat & SCHED_STAT_PRUN){
++		atomic_dec(&parent_ctx->process_preempt);
++		
++		tmp_reg = kbase_region_tracker_find_region_enclosing_address(parent_ctx, katom->jc_indirect);
++		klc_map = kmap_atomic(pfn_to_page(PFN_DOWN(tmp_reg->alloc->pages[0])));
++		klc_info = klc_map;
++
++		*(klc_info+(katom->jc_indirect&0xfff)/4) = 0x0;
++		kbase_sync_to_memory(tmp_reg->alloc->pages[0], klc_map, PAGE_SIZE);
++		kunmap_atomic(klc_map);
++	}
++
++	if(list_empty(&ctx_info->job_list_head[job_info->cached_variant_idx])){
++		list_add(&katom->sched_info.cfs.list, &ctx_info->job_list_head[job_info->cached_variant_idx]);
++	}else{
++		list_for_each_entry(pos,  &ctx_info->job_list_head[job_info->cached_variant_idx], sched_info.cfs.list){
++			if(pos->atom_id>katom->atom_id){
++				list_add(&katom->sched_info.cfs.list, pos->sched_info.cfs.list.prev);
++				return;
++			}
++		}
++		list_add_tail(&katom->sched_info.cfs.list, &ctx_info->job_list_head[job_info->cached_variant_idx]);
++	}
++	//|=를 하지 않는 이유는 running stat와 preemption stat를 같이 초기화 하기 위해서다.
++	//RESCHED 상태 활성화를 통해서 재 스케줄링 될때 resnapshot을 찍도록 한다.
++	if(katom->sched_stat & SCHED_STAT_PMASK)
++		katom->sched_stat &= ~(SCHED_STAT_PMASK | SCHED_STAT_SMASK);
++	
+ 	if(katom->dep_flag){
+ 		katom->dep_flag = 0;
+ 		parent_ctx->nr_dep_job--;
+ 	}
+-	//custom_trace end
++	
++	katom->sched_stat |= SCHED_STAT_POOL;
++
++#else
+ 	list_add_tail(&katom->sched_info.cfs.list, &ctx_info->job_list_head[job_info->cached_variant_idx]);
++#endif
+ }
+ 
+ void kbasep_js_policy_log_job_result(kbasep_js_policy *js_policy, kbase_jd_atom *katom, u64 time_spent_us)
+@@ -1436,7 +1581,6 @@
+ 	KBASE_DEBUG_ASSERT(parent_ctx != NULL);
+ 
+ 	ctx_info = &parent_ctx->jctx.sched_info.runpool.policy_ctx.cfs;
+-
+ 	ctx_info->runtime_us += priority_weight(ctx_info, time_spent_us);
+ }
+ 
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_js_policy_cfs.h tsk/drivers/gpu/arm/midgard/mali_kbase_js_policy_cfs.h
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_js_policy_cfs.h	2017-08-18 11:51:55.119668927 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_js_policy_cfs.h	2017-08-18 11:18:55.951174335 +0900
+@@ -135,6 +135,9 @@
+ 	mali_bool process_rt_policy;
+ 	/* Calling process NICE priority */
+ 	int process_priority;
++//#ifdef _TSK_CUSTOM_SCHED_
++    int gpgpu_priority;
++//#endif
+ 	/* Average NICE priority of all atoms in bag:
+ 	 * Hold the kbasep_js_kctx_info::ctx::jsctx_mutex when accessing  */
+ 	int bag_priority;
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_mem.c tsk/drivers/gpu/arm/midgard/mali_kbase_mem.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_mem.c	2017-08-18 11:51:55.119668927 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_mem.c	2017-08-18 11:18:55.951174335 +0900
+@@ -625,11 +625,34 @@
+  */
+ void kbase_free_alloced_region(struct kbase_va_region *reg)
+ {
++#ifdef _TSK_CUSTOM_SNAP_
++	int i, s;
++	struct custom_dump_region *dreg;
++#endif
+ 	KBASE_DEBUG_ASSERT(NULL != reg);
++#ifdef _TSK_CUSTOM_SNAP_
+ 
+-	//measure
+-	//reg->kctx->mem_count -= (int)reg->nr_pages;
+-	//printk(KERN_ALERT"FREE[%zu] => MEM[%d]\n", reg->nr_pages, reg->kctx->mem_count);
++	//printk(KERN_ALERT"<gpu> del reg : %u\n", reg->reg_id);
++	if(reg->kctx->jctx.sched_info.runpool.policy_ctx.cfs.gpgpu_priority > SCHED_RT_PRIORITY){
++	//spin_lock_irqsave(&reg->kctx->snap_lock, mem_flag);
++	s = kbase_reg_current_backed_size(reg);
++	if (((reg->flags & KBASE_REG_ZONE_MASK) == KBASE_REG_ZONE_SAME_VA && s==1) ||
++		((reg->flags & KBASE_REG_ZONE_MASK) == KBASE_REG_ZONE_EXEC && s==1) ||
++		(reg->flags & KBASE_REG_ZONE_MASK) == KBASE_REG_ZONE_CUSTOM_VA){
++
++		dreg = &reg->dreg;
++		vunmap(dreg->ksp);
++		vunmap(dreg->kdp);
++		for(i=0;i<dreg->nr_pages;i++){
++			        __free_page(dreg->dp[i]);
++		}
++		kfree(dreg->sp);
++		kfree(dreg->dp);
++	}
++
++	//spin_unlock_irqrestore(&reg->kctx->snap_lock, mem_flag);
++	}
++#endif
+ 	if (!(reg->flags & KBASE_REG_FREE)) {
+ 		kbase_mem_phy_alloc_put(reg->alloc);
+ 		KBASE_DEBUG_CODE(
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_mem.h tsk/drivers/gpu/arm/midgard/mali_kbase_mem.h
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_mem.h	2017-08-18 11:51:55.119668927 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_mem.h	2017-08-18 11:18:55.951174335 +0900
+@@ -177,6 +177,13 @@
+  * A GPU memory region, and attributes for CPU mappings.
+  */
+ typedef struct kbase_va_region {
++#ifdef _TSK_CUSTOM_
++    u32 reg_id;
++#endif
++#ifdef _TSK_CUSTOM_SNAP_
++    custom_dump_region dreg;
++#endif
++
+ 	struct rb_node rblink;
+ 	struct list_head link;
+ 
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_mem_linux.c tsk/drivers/gpu/arm/midgard/mali_kbase_mem_linux.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_mem_linux.c	2017-08-18 11:51:55.119668927 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_mem_linux.c	2017-08-18 11:18:55.952174328 +0900
+@@ -50,6 +50,14 @@
+ 	int cpu_va_bits;
+ 	struct kbase_va_region *reg;
+ 	struct device *dev;
++#ifdef _TSK_CUSTOM_SNAP_
++	int i, s;
++	struct custom_dump_region *dreg;
++	unsigned long mem_flag;
++#endif
++#ifdef _TSK_TRACE_EVAL_
++	ktime_t tmp_start, tmp_end;
++#endif
+ 	KBASE_DEBUG_ASSERT(kctx);
+ 	KBASE_DEBUG_ASSERT(flags);
+ 	KBASE_DEBUG_ASSERT(gpu_va);
+@@ -153,11 +161,55 @@
+ 		*gpu_va = reg->start_pfn << PAGE_SHIFT;
+ 	}
+ 
+-	kbase_gpu_vm_unlock(kctx);
+-	if((reg->flags & KBASE_REG_ZONE_MASK) == KBASE_REG_ZONE_CUSTOM_VA){
+-		kctx->mem_count += (int)va_pages;
+-		//printk(KERN_ALERT"ALLOC[%llu] => MEM[%d]\n", va_pages, reg->kctx->mem_count);
++#ifdef _TSK_CUSTOM_
++	reg->reg_id = kctx->nr_reg_id;
++	kctx->nr_reg_id++;
++#endif
++#ifdef _TSK_CUSTOM_SNAP_
++
++	if(kctx->jctx.sched_info.runpool.policy_ctx.cfs.gpgpu_priority > SCHED_RT_PRIORITY){
++		spin_lock_irqsave(&kctx->snap_lock, mem_flag);
++
++#ifdef _TSK_TRACE_EVAL_
++		tmp_start = ktime_get();
++#endif
++		s =  kbase_reg_current_backed_size(reg);
++		if (((reg->flags & KBASE_REG_ZONE_MASK) == KBASE_REG_ZONE_SAME_VA && s==1) ||
++			((reg->flags & KBASE_REG_ZONE_MASK) == KBASE_REG_ZONE_EXEC && s==1) ||
++			(reg->flags & KBASE_REG_ZONE_MASK) == KBASE_REG_ZONE_CUSTOM_VA){
++
++			dreg = &reg->dreg;
++			dreg->kctx = reg->alloc->imported.kctx;
++			dreg->reg = reg;
++			dreg->nr_pages = reg->alloc->nents;
++			dreg->sp = kmalloc(sizeof(struct page*) * dreg->nr_pages, GFP_KERNEL);
++			dreg->dp = kmalloc(sizeof(struct page*) * dreg->nr_pages, GFP_KERNEL);
++
++			for(i=0;i<dreg->nr_pages;i++){
++				dreg->sp[i] = pfn_to_page(PFN_DOWN(reg->alloc->pages[i]));
++				dreg->dp[i] = alloc_page(GFP_HIGHUSER);
++			/*mp = kmap(dreg->dp[i]);
++			memset(mp, 0x00, 1);
++			kbase_sync_to_memory(PFN_PHYS(page_to_pfn(dreg->dp[i])), mp, 1);
++			kunmap(dreg->dp[i]);
++			*/
++
++			}
++	                                                                  
++			dreg->ksp = vmap(dreg->sp, dreg->nr_pages, VM_MAP, PAGE_KERNEL);
++			dreg->kdp = vmap(dreg->dp, dreg->nr_pages, VM_MAP, PAGE_KERNEL);
++			//printk(KERN_ALERT"<gpu> region alloc : %u\n",reg->reg_id);
++		}
++#ifdef _TSK_TRACE_EVAL_
++		tmp_end = ktime_get();
++		kctx->mtimes = ktime_add(kctx->mtimes, ktime_sub(tmp_end, tmp_start));
++		kctx->nr_mpages += reg->alloc->nents;
++#endif
++
++		spin_unlock_irqrestore(&kctx->snap_lock, mem_flag);
+ 	}
++#endif
++	kbase_gpu_vm_unlock(kctx);
+ 	return reg;
+ 
+ no_mmap:
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_mmu.c tsk/drivers/gpu/arm/midgard/mali_kbase_mmu.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_mmu.c	2017-08-18 11:51:55.119668927 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_mmu.c	2017-08-18 11:18:55.952174328 +0900
+@@ -1317,6 +1317,9 @@
+ 		KBASE_DEBUG_ASSERT(0 == object_is_on_stack(&as->work_pagefault));
+ 		INIT_WORK(&as->work_pagefault, page_fault_worker);
+ 		queue_work(as->pf_wq, &as->work_pagefault);
++#ifdef CONFIG_GPU_TRACEPOINTS
++		//trace_gpu_custom("page fault", ktime_to_ns(ktime_get()), kctx->ctx_id, 0, (u32)pf_bits, (u32)0);
++#endif
+ 	}
+ 
+ 	/* reenable interrupts */
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_trace_timeline.c tsk/drivers/gpu/arm/midgard/mali_kbase_trace_timeline.c
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/mali_kbase_trace_timeline.c	2017-08-18 11:51:55.120668921 +0900
++++ tsk/drivers/gpu/arm/midgard/mali_kbase_trace_timeline.c	2017-08-18 11:18:55.953174321 +0900
+@@ -134,6 +134,7 @@
+ {
+ 	lockdep_assert_held(&kbdev->js_data.runpool_irq.lock);
+ 
++	printk(KERN_ALERT"time line?\n");
+ 	if (done_code & KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT) {
+ 		KBASE_TIMELINE_JOB_START_NEXT(kctx, js, 0);
+ 	} else {
+diff -urN origin/TSK-Origin/drivers/gpu/arm/midgard/test tsk/drivers/gpu/arm/midgard/test
+--- origin/TSK-Origin/drivers/gpu/arm/midgard/test	1970-01-01 09:00:00.000000000 +0900
++++ tsk/drivers/gpu/arm/midgard/test	2017-08-18 11:18:55.955174308 +0900
+@@ -0,0 +1,2183 @@
++
++mali_kbase_jm.o:     file format elf32-littlearm
++
++
++Disassembly of section .text:
++
++00000000 <kbasep_try_reset_gpu_early_locked>:
++       0:	e1a0c00d 	mov	ip, sp
++       4:	e92dd800 	push	{fp, ip, lr, pc}
++       8:	e24cb004 	sub	fp, ip, #4
++       c:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++      10:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++      14:	e3013f34 	movw	r3, #7988	; 0x1f34
++      18:	e7d0e003 	ldrb	lr, [r0, r3]
++      1c:	e35e0000 	cmp	lr, #0
++      20:	0a00000b 	beq	54 <kbasep_try_reset_gpu_early_locked+0x54>
++      24:	e3a03000 	mov	r3, #0
++      28:	e1a01003 	mov	r1, r3
++      2c:	e1a02003 	mov	r2, r3
++      30:	e080c003 	add	ip, r0, r3
++      34:	e2822001 	add	r2, r2, #1
++      38:	e152000e 	cmp	r2, lr
++      3c:	e283304c 	add	r3, r3, #76	; 0x4c
++      40:	e5dcc049 	ldrb	ip, [ip, #73]	; 0x49
++      44:	e081100c 	add	r1, r1, ip
++      48:	bafffff8 	blt	30 <kbasep_try_reset_gpu_early_locked+0x30>
++      4c:	e3510000 	cmp	r1, #0
++      50:	189da800 	ldmne	sp, {fp, sp, pc}
++      54:	e2802d92 	add	r2, r0, #9344	; 0x2480
++      58:	e2823030 	add	r3, r2, #48	; 0x30
++      5c:	f57ff05f 	dmb	sy
++      60:	e3a01003 	mov	r1, #3
++      64:	e193ef9f 	ldrex	r14, [r3]
++      68:	e3a0c000 	mov	ip, #0
++      6c:	e33e0002 	teq	lr, #2
++      70:	0183cf91 	strexeq	ip, r1, [r3]
++      74:	e35c0000 	cmp	ip, #0
++      78:	1afffff9 	bne	64 <kbasep_try_reset_gpu_early_locked+0x64>
++      7c:	f57ff05f 	dmb	sy
++      80:	e35e0002 	cmp	lr, #2
++      84:	189da800 	ldmne	sp, {fp, sp, pc}
++      88:	e30234b4 	movw	r3, #9396	; 0x24b4
++      8c:	e2822038 	add	r2, r2, #56	; 0x38
++      90:	e7901003 	ldr	r1, [r0, r3]
++      94:	e3a00008 	mov	r0, #8
++      98:	ebfffffe 	bl	0 <queue_work_on>
++      9c:	e89da800 	ldm	sp, {fp, sp, pc}
++
++000000a0 <kbasep_try_reset_gpu_early>:
++      a0:	e1a0c00d 	mov	ip, sp
++      a4:	e92dd878 	push	{r3, r4, r5, r6, fp, ip, lr, pc}
++      a8:	e24cb004 	sub	fp, ip, #4
++      ac:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++      b0:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++      b4:	e2804e87 	add	r4, r0, #2160	; 0x870
++      b8:	e1a05000 	mov	r5, r0
++      bc:	e1a00004 	mov	r0, r4
++      c0:	ebfffffe 	bl	0 <_raw_spin_lock_irqsave>
++      c4:	e1a06000 	mov	r6, r0
++      c8:	e1a00005 	mov	r0, r5
++      cc:	ebffffcb 	bl	0 <kbasep_try_reset_gpu_early_locked>
++      d0:	e1a00004 	mov	r0, r4
++      d4:	e1a01006 	mov	r1, r6
++      d8:	ebfffffe 	bl	0 <_raw_spin_unlock_irqrestore>
++      dc:	e89da878 	ldm	sp, {r3, r4, r5, r6, fp, sp, pc}
++
++000000e0 <kbase_job_hw_submit>:
++      e0:	e1a0c00d 	mov	ip, sp
++      e4:	e92ddbf0 	push	{r4, r5, r6, r7, r8, r9, fp, ip, lr, pc}
++      e8:	e24cb004 	sub	fp, ip, #4
++      ec:	e24dd008 	sub	sp, sp, #8
++      f0:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++      f4:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++      f8:	e1a06382 	lsl	r6, r2, #7
++      fc:	e5917180 	ldr	r7, [r1, #384]	; 0x180
++     100:	e1a04001 	mov	r4, r1
++     104:	e6ff6076 	uxth	r6, r6
++     108:	e59491c4 	ldr	r9, [r4, #452]	; 0x1c4
++     10c:	e2866d61 	add	r6, r6, #6208	; 0x1840
++     110:	e1a08002 	mov	r8, r2
++     114:	e1a03007 	mov	r3, r7
++     118:	e59421c0 	ldr	r2, [r4, #448]	; 0x1c0
++     11c:	e30f1fc0 	movw	r1, #65472	; 0xffc0
++     120:	e0011006 	and	r1, r1, r6
++     124:	e1a05000 	mov	r5, r0
++     128:	ebfffffe 	bl	0 <kbase_reg_write>
++     12c:	e2861004 	add	r1, r6, #4
++     130:	e1a02009 	mov	r2, r9
++     134:	e1a03007 	mov	r3, r7
++     138:	e1a00005 	mov	r0, r5
++     13c:	e6ff1071 	uxth	r1, r1
++     140:	ebfffffe 	bl	0 <kbase_reg_write>
++     144:	e2861010 	add	r1, r6, #16
++     148:	e1a03007 	mov	r3, r7
++     14c:	e1a00005 	mov	r0, r5
++     150:	e6ff1071 	uxth	r1, r1
++     154:	e59421b8 	ldr	r2, [r4, #440]	; 0x1b8
++     158:	ebfffffe 	bl	0 <kbase_reg_write>
++     15c:	e2861014 	add	r1, r6, #20
++     160:	e1a03007 	mov	r3, r7
++     164:	e59421bc 	ldr	r2, [r4, #444]	; 0x1bc
++     168:	e1a00005 	mov	r0, r5
++     16c:	e6ff1071 	uxth	r1, r1
++     170:	ebfffffe 	bl	0 <kbase_reg_write>
++     174:	e30433a4 	movw	r3, #17316	; 0x43a4
++     178:	e3022164 	movw	r2, #8548	; 0x2164
++     17c:	e3403002 	movt	r3, #2
++     180:	e7952002 	ldr	r2, [r5, r2]
++     184:	e7973003 	ldr	r3, [r7, r3]
++     188:	e3120001 	tst	r2, #1
++     18c:	e3833a83 	orr	r3, r3, #536576	; 0x83000
++     190:	e3832c07 	orr	r2, r3, #1792	; 0x700
++     194:	0a00000c 	beq	1cc <kbase_job_hw_submit+0xec>
++     198:	e3a0104c 	mov	r1, #76	; 0x4c
++     19c:	e0285891 	mla	r8, r1, r8, r5
++     1a0:	e2888048 	add	r8, r8, #72	; 0x48
++     1a4:	e5d81002 	ldrb	r1, [r8, #2]
++     1a8:	e3510000 	cmp	r1, #0
++     1ac:	e5941234 	ldr	r1, [r4, #564]	; 0x234
++     1b0:	03832c0f 	orreq	r2, r3, #3840	; 0xf00
++     1b4:	03811008 	orreq	r1, r1, #8
++     1b8:	03a03001 	moveq	r3, #1
++     1bc:	13a03000 	movne	r3, #0
++     1c0:	13c11008 	bicne	r1, r1, #8
++     1c4:	e5841234 	str	r1, [r4, #564]	; 0x234
++     1c8:	e5c83002 	strb	r3, [r8, #2]
++     1cc:	e2861018 	add	r1, r6, #24
++     1d0:	e1a03007 	mov	r3, r7
++     1d4:	e1a00005 	mov	r0, r5
++     1d8:	e3a07f5a 	mov	r7, #360	; 0x168
++     1dc:	e6ff1071 	uxth	r1, r1
++     1e0:	ebfffffe 	bl	0 <kbase_reg_write>
++     1e4:	e24b002c 	sub	r0, fp, #44	; 0x2c
++     1e8:	ebfffffe 	bl	0 <ktime_get>
++     1ec:	e3001000 	movw	r1, #0
++     1f0:	e3401000 	movt	r1, #0
++     1f4:	e14b22dc 	ldrd	r2, [fp, #-44]	; 0xffffffd4
++     1f8:	e5911000 	ldr	r1, [r1]
++     1fc:	e18420f7 	strd	r2, [r4, r7]
++     200:	e3510000 	cmp	r1, #0
++     204:	1a000007 	bne	228 <kbase_job_hw_submit+0x148>
++     208:	e2861020 	add	r1, r6, #32
++     20c:	e1a00005 	mov	r0, r5
++     210:	e5943180 	ldr	r3, [r4, #384]	; 0x180
++     214:	e3a02001 	mov	r2, #1
++     218:	e6ff1071 	uxth	r1, r1
++     21c:	ebfffffe 	bl	0 <kbase_reg_write>
++     220:	e24bd024 	sub	sp, fp, #36	; 0x24
++     224:	e89dabf0 	ldm	sp, {r4, r5, r6, r7, r8, r9, fp, sp, pc}
++     228:	e2850d22 	add	r0, r5, #2176	; 0x880
++     22c:	ebfffffe 	bl	0 <lock_is_held>
++     230:	e3500000 	cmp	r0, #0
++     234:	1afffff3 	bne	208 <kbase_job_hw_submit+0x128>
++     238:	e3000000 	movw	r0, #0
++     23c:	e300114e 	movw	r1, #334	; 0x14e
++     240:	e3400000 	movt	r0, #0
++     244:	ebfffffe 	bl	0 <warn_slowpath_null>
++     248:	eaffffee 	b	208 <kbase_job_hw_submit+0x128>
++
++0000024c <kbase_job_submit_nolock>:
++     24c:	e1a0c00d 	mov	ip, sp
++     250:	e92dd830 	push	{r4, r5, fp, ip, lr, pc}
++     254:	e24cb004 	sub	fp, ip, #4
++     258:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++     25c:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++     260:	e3a0304c 	mov	r3, #76	; 0x4c
++     264:	e0230293 	mla	r3, r3, r2, r0
++     268:	e5d3c049 	ldrb	ip, [r3, #73]	; 0x49
++     26c:	e5d3e048 	ldrb	lr, [r3, #72]	; 0x48
++     270:	e28c4001 	add	r4, ip, #1
++     274:	e5c34049 	strb	r4, [r3, #73]	; 0x49
++     278:	e08cc00e 	add	ip, ip, lr
++     27c:	e20cc00f 	and	ip, ip, #15
++     280:	e083c10c 	add	ip, r3, ip, lsl #2
++     284:	e58c1004 	str	r1, [ip, #4]
++     288:	e591c008 	ldr	ip, [r1, #8]
++     28c:	e38ce002 	orr	lr, ip, #2
++     290:	e581e008 	str	lr, [r1, #8]
++     294:	e5d34048 	ldrb	r4, [r3, #72]	; 0x48
++     298:	e204400f 	and	r4, r4, #15
++     29c:	e0833104 	add	r3, r3, r4, lsl #2
++     2a0:	e5933004 	ldr	r3, [r3, #4]
++     2a4:	e1530001 	cmp	r3, r1
++     2a8:	189da830 	ldmne	sp, {r4, r5, fp, sp, pc}
++     2ac:	e31c0c02 	tst	ip, #512	; 0x200
++     2b0:	0a000006 	beq	2d0 <kbase_job_submit_nolock+0x84>
++     2b4:	e3021650 	movw	r1, #9808	; 0x2650
++     2b8:	e790c001 	ldr	ip, [r0, r1]
++     2bc:	e22cc001 	eor	ip, ip, #1
++     2c0:	e780c001 	str	ip, [r0, r1]
++     2c4:	e593e008 	ldr	lr, [r3, #8]
++     2c8:	e3ceec02 	bic	lr, lr, #512	; 0x200
++     2cc:	e583e008 	str	lr, [r3, #8]
++     2d0:	e3024650 	movw	r4, #9808	; 0x2650
++     2d4:	e5931180 	ldr	r1, [r3, #384]	; 0x180
++     2d8:	e790c004 	ldr	ip, [r0, r4]
++     2dc:	e3a05054 	mov	r5, #84	; 0x54
++     2e0:	e5911220 	ldr	r1, [r1, #544]	; 0x220
++     2e4:	e02c0c95 	mla	ip, r5, ip, r0
++     2e8:	e3710013 	cmn	r1, #19
++     2ec:	e28ccd99 	add	ip, ip, #9792	; 0x2640
++     2f0:	e28cc014 	add	ip, ip, #20
++     2f4:	0a000006 	beq	314 <kbase_job_submit_nolock+0xc8>
++     2f8:	e38ee004 	orr	lr, lr, #4
++     2fc:	e1a0100c 	mov	r1, ip
++     300:	e583e008 	str	lr, [r3, #8]
++     304:	e58c3004 	str	r3, [ip, #4]
++     308:	e7900004 	ldr	r0, [r0, r4]
++     30c:	ebfffffe 	bl	0 <submit_snapshot>
++     310:	e89da830 	ldm	sp, {r4, r5, fp, sp, pc}
++     314:	e38ee008 	orr	lr, lr, #8
++     318:	e1a01003 	mov	r1, r3
++     31c:	e583e008 	str	lr, [r3, #8]
++     320:	ebfffffe 	bl	0 <sc_hw_submit>
++     324:	e89da830 	ldm	sp, {r4, r5, fp, sp, pc}
++
++00000328 <kbase_job_done_slot>:
++     328:	e1a0c00d 	mov	ip, sp
++     32c:	e92ddff8 	push	{r3, r4, r5, r6, r7, r8, r9, sl, fp, ip, lr, pc}
++     330:	e24cb004 	sub	fp, ip, #4
++     334:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++     338:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++     33c:	e3c23002 	bic	r3, r2, #2
++     340:	e3530001 	cmp	r3, #1
++     344:	e3023650 	movw	r3, #9808	; 0x2650
++     348:	e1a07002 	mov	r7, r2
++     34c:	e1a05000 	mov	r5, r0
++     350:	e1a06001 	mov	r6, r1
++     354:	e7909003 	ldr	r9, [r0, r3]
++     358:	e59ba00c 	ldr	sl, [fp, #12]
++     35c:	1a000044 	bne	474 <kbase_job_done_slot+0x14c>
++     360:	e3a0204c 	mov	r2, #76	; 0x4c
++     364:	e3a0e000 	mov	lr, #0
++     368:	e0020692 	mul	r2, r2, r6
++     36c:	e0853002 	add	r3, r5, r2
++     370:	e795c002 	ldr	ip, [r5, r2]
++     374:	e5dc0509 	ldrb	r0, [ip, #1289]	; 0x509
++     378:	e3500000 	cmp	r0, #0
++     37c:	128ccd13 	addne	ip, ip, #1216	; 0x4c0
++     380:	01a0c003 	moveq	ip, r3
++     384:	05d30049 	ldrbeq	r0, [r3, #73]	; 0x49
++     388:	e5dc1048 	ldrb	r1, [ip, #72]	; 0x48
++     38c:	e2400001 	sub	r0, r0, #1
++     390:	e201200f 	and	r2, r1, #15
++     394:	e2811001 	add	r1, r1, #1
++     398:	e201100f 	and	r1, r1, #15
++     39c:	e08c2102 	add	r2, ip, r2, lsl #2
++     3a0:	e5924004 	ldr	r4, [r2, #4]
++     3a4:	e582e004 	str	lr, [r2, #4]
++     3a8:	e5cc0049 	strb	r0, [ip, #73]	; 0x49
++     3ac:	e5cc1048 	strb	r1, [ip, #72]	; 0x48
++     3b0:	e5942008 	ldr	r2, [r4, #8]
++     3b4:	e3c22002 	bic	r2, r2, #2
++     3b8:	e5842008 	str	r2, [r4, #8]
++     3bc:	e5d32049 	ldrb	r2, [r3, #73]	; 0x49
++     3c0:	e152000e 	cmp	r2, lr
++     3c4:	0a000006 	beq	3e4 <kbase_job_done_slot+0xbc>
++     3c8:	e5d32048 	ldrb	r2, [r3, #72]	; 0x48
++     3cc:	e202200f 	and	r2, r2, #15
++     3d0:	e0833102 	add	r3, r3, r2, lsl #2
++     3d4:	e5933004 	ldr	r3, [r3, #4]
++     3d8:	e5932008 	ldr	r2, [r3, #8]
++     3dc:	e312000c 	tst	r2, #12
++     3e0:	0a000014 	beq	438 <kbase_job_done_slot+0x110>
++     3e4:	e1cb80d4 	ldrd	r8, [fp, #4]
++     3e8:	e5940180 	ldr	r0, [r4, #384]	; 0x180
++     3ec:	e1989009 	orrs	r9, r8, r9
++     3f0:	11cb80d4 	ldrdne	r8, [fp, #4]
++     3f4:	13a03d07 	movne	r3, #448	; 0x1c0
++     3f8:	118480f3 	strdne	r8, [r4, r3]
++     3fc:	e59421dc 	ldr	r2, [r4, #476]	; 0x1dc
++     400:	e3a05001 	mov	r5, #1
++     404:	e1a01005 	mov	r1, r5
++     408:	e3043002 	movw	r3, #16386	; 0x4002
++     40c:	e1520003 	cmp	r2, r3
++     410:	e1a03615 	lsl	r3, r5, r6
++     414:	158471dc 	strne	r7, [r4, #476]	; 0x1dc
++     418:	e3012004 	movw	r2, #4100	; 0x1004
++     41c:	ebfffffe 	bl	0 <kbase_device_trace_register_access>
++     420:	e1a00004 	mov	r0, r4
++     424:	e1a01006 	mov	r1, r6
++     428:	e1a0200a 	mov	r2, sl
++     42c:	e1a03005 	mov	r3, r5
++     430:	ebfffffe 	bl	0 <kbase_jd_done>
++     434:	e89daff8 	ldm	sp, {r3, r4, r5, r6, r7, r8, r9, sl, fp, sp, pc}
++     438:	e5931180 	ldr	r1, [r3, #384]	; 0x180
++     43c:	e5911220 	ldr	r1, [r1, #544]	; 0x220
++     440:	e3710013 	cmn	r1, #19
++     444:	0a000010 	beq	48c <kbase_job_done_slot+0x164>
++     448:	e3a01054 	mov	r1, #84	; 0x54
++     44c:	e3020650 	movw	r0, #9808	; 0x2650
++     450:	e0295991 	mla	r9, r1, r9, r5
++     454:	e3822004 	orr	r2, r2, #4
++     458:	e5832008 	str	r2, [r3, #8]
++     45c:	e2891d99 	add	r1, r9, #9792	; 0x2640
++     460:	e2811014 	add	r1, r1, #20
++     464:	e5813004 	str	r3, [r1, #4]
++     468:	e7950000 	ldr	r0, [r5, r0]
++     46c:	ebfffffe 	bl	0 <submit_snapshot>
++     470:	eaffffdb 	b	3e4 <kbase_job_done_slot+0xbc>
++     474:	e3001000 	movw	r1, #0
++     478:	e1a03006 	mov	r3, r6
++     47c:	e3401000 	movt	r1, #0
++     480:	e5900524 	ldr	r0, [r0, #1316]	; 0x524
++     484:	ebfffffe 	bl	0 <dev_err>
++     488:	eaffffb4 	b	360 <kbase_job_done_slot+0x38>
++     48c:	e3822008 	orr	r2, r2, #8
++     490:	e1a00005 	mov	r0, r5
++     494:	e5832008 	str	r2, [r3, #8]
++     498:	e1a01003 	mov	r1, r3
++     49c:	e3a02001 	mov	r2, #1
++     4a0:	ebfffffe 	bl	0 <sc_hw_submit>
++     4a4:	eaffffce 	b	3e4 <kbase_job_done_slot+0xbc>
++
++000004a8 <kbase_job_done>:
++     4a8:	e1a0c00d 	mov	ip, sp
++     4ac:	e92ddff0 	push	{r4, r5, r6, r7, r8, r9, sl, fp, ip, lr, pc}
++     4b0:	e24cb004 	sub	fp, ip, #4
++     4b4:	e24dd064 	sub	sp, sp, #100	; 0x64
++     4b8:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++     4bc:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++     4c0:	e24b8034 	sub	r8, fp, #52	; 0x34
++     4c4:	e1a09000 	mov	r9, r0
++     4c8:	e1a0a001 	mov	sl, r1
++     4cc:	e1a00008 	mov	r0, r8
++     4d0:	ebfffffe 	bl	0 <ktime_get>
++     4d4:	e2890c05 	add	r0, r9, #1280	; 0x500
++     4d8:	e280000c 	add	r0, r0, #12
++     4dc:	e3a01010 	mov	r1, #16
++     4e0:	ebfffffe 	bl	0 <__memzero>
++     4e4:	e289004c 	add	r0, r9, #76	; 0x4c
++     4e8:	ebfffffe 	bl	0 <sc_is_preempt>
++     4ec:	e2503000 	subs	r3, r0, #0
++     4f0:	0a000015 	beq	54c <kbase_job_done+0xa4>
++     4f4:	e2896e87 	add	r6, r9, #2160	; 0x870
++     4f8:	e50b6064 	str	r6, [fp, #-100]	; 0x64
++     4fc:	e3a04000 	mov	r4, #0
++     500:	e3a05000 	mov	r5, #0
++     504:	e1a00006 	mov	r0, r6
++     508:	ebfffffe 	bl	0 <_raw_spin_lock_irqsave>
++     50c:	e3a01001 	mov	r1, #1
++     510:	e58d8008 	str	r8, [sp, #8]
++     514:	e1a02001 	mov	r2, r1
++     518:	e1cd40f0 	strd	r4, [sp]
++     51c:	e50b0068 	str	r0, [fp, #-104]	; 0x68
++     520:	e1a00009 	mov	r0, r9
++     524:	ebfffffe 	bl	328 <kbase_job_done_slot>
++     528:	e51b0064 	ldr	r0, [fp, #-100]	; 0x64
++     52c:	e51b1068 	ldr	r1, [fp, #-104]	; 0x68
++     530:	ebfffffe 	bl	0 <_raw_spin_unlock_irqrestore>
++     534:	e30234b0 	movw	r3, #9392	; 0x24b0
++     538:	e7993003 	ldr	r3, [r9, r3]
++     53c:	e3530002 	cmp	r3, #2
++     540:	0a0000a3 	beq	7d4 <kbase_job_done+0x32c>
++     544:	e24bd028 	sub	sp, fp, #40	; 0x28
++     548:	e89daff0 	ldm	sp, {r4, r5, r6, r7, r8, r9, sl, fp, sp, pc}
++     54c:	e3022530 	movw	r2, #9520	; 0x2530
++     550:	e1a00009 	mov	r0, r9
++     554:	e7992002 	ldr	r2, [r9, r2]
++     558:	e3011014 	movw	r1, #4116	; 0x1014
++     55c:	e2897e87 	add	r7, r9, #2160	; 0x870
++     560:	e50b7064 	str	r7, [fp, #-100]	; 0x64
++     564:	ebfffffe 	bl	0 <kbase_reg_write>
++     568:	e51b0064 	ldr	r0, [fp, #-100]	; 0x64
++     56c:	ebfffffe 	bl	0 <_raw_spin_lock_irqsave>
++     570:	e35a0000 	cmp	sl, #0
++     574:	e50b0068 	str	r0, [fp, #-104]	; 0x68
++     578:	0affffea 	beq	528 <kbase_job_done+0x80>
++     57c:	e1a0182a 	lsr	r1, sl, #16
++     580:	e6ff007a 	uxth	r0, sl
++     584:	e1800001 	orr	r0, r0, r1
++     588:	e3a03001 	mov	r3, #1
++     58c:	e2602000 	rsb	r2, r0, #0
++     590:	e3a04000 	mov	r4, #0
++     594:	e0022000 	and	r2, r2, r0
++     598:	e3a05000 	mov	r5, #0
++     59c:	e16f2f12 	clz	r2, r2
++     5a0:	e262601f 	rsb	r6, r2, #31
++     5a4:	e262202f 	rsb	r2, r2, #47	; 0x2f
++     5a8:	e1a0c613 	lsl	ip, r3, r6
++     5ac:	e1a03213 	lsl	r3, r3, r2
++     5b0:	e50b304c 	str	r3, [fp, #-76]	; 0x4c
++     5b4:	e1a03386 	lsl	r3, r6, #7
++     5b8:	e51b704c 	ldr	r7, [fp, #-76]	; 0x4c
++     5bc:	e50bc038 	str	ip, [fp, #-56]	; 0x38
++     5c0:	e6ff3073 	uxth	r3, r3
++     5c4:	e187700c 	orr	r7, r7, ip
++     5c8:	e3a0c04c 	mov	ip, #76	; 0x4c
++     5cc:	e02c969c 	mla	ip, ip, r6, r9
++     5d0:	e2833b06 	add	r3, r3, #6144	; 0x1800
++     5d4:	e2830024 	add	r0, r3, #36	; 0x24
++     5d8:	e50b2040 	str	r2, [fp, #-64]	; 0x40
++     5dc:	e2832008 	add	r2, r3, #8
++     5e0:	e283300c 	add	r3, r3, #12
++     5e4:	e6ff0070 	uxth	r0, r0
++     5e8:	e50b7044 	str	r7, [fp, #-68]	; 0x44
++     5ec:	e6ff2072 	uxth	r2, r2
++     5f0:	e6ff3073 	uxth	r3, r3
++     5f4:	e50bc03c 	str	ip, [fp, #-60]	; 0x3c
++     5f8:	e1a0c00a 	mov	ip, sl
++     5fc:	e50b0058 	str	r0, [fp, #-88]	; 0x58
++     600:	e50b205c 	str	r2, [fp, #-92]	; 0x5c
++     604:	e50b3060 	str	r3, [fp, #-96]	; 0x60
++     608:	e50b607c 	str	r6, [fp, #-124]	; 0x7c
++     60c:	e51b6038 	ldr	r6, [fp, #-56]	; 0x38
++     610:	e1110006 	tst	r1, r6
++     614:	1a000072 	bne	7e4 <kbase_job_done+0x33c>
++     618:	e3a07000 	mov	r7, #0
++     61c:	e3a06000 	mov	r6, #0
++     620:	e14b65f4 	strd	r6, [fp, #-84]	; 0xffffffac
++     624:	e3a07001 	mov	r7, #1
++     628:	e50b7048 	str	r7, [fp, #-72]	; 0x48
++     62c:	e51b2044 	ldr	r2, [fp, #-68]	; 0x44
++     630:	e1a00009 	mov	r0, r9
++     634:	e3011004 	movw	r1, #4100	; 0x1004
++     638:	e3a03000 	mov	r3, #0
++     63c:	e002200c 	and	r2, r2, ip
++     640:	e50bc078 	str	ip, [fp, #-120]	; 0x78
++     644:	ebfffffe 	bl	0 <kbase_reg_write>
++     648:	e3a02000 	mov	r2, #0
++     64c:	e1a00009 	mov	r0, r9
++     650:	e3011010 	movw	r1, #4112	; 0x1010
++     654:	ebfffffe 	bl	0 <kbase_reg_read>
++     658:	e51bc078 	ldr	ip, [fp, #-120]	; 0x78
++     65c:	e51b6040 	ldr	r6, [fp, #-64]	; 0x40
++     660:	e51b707c 	ldr	r7, [fp, #-124]	; 0x7c
++     664:	e1a0c63c 	lsr	ip, ip, r6
++     668:	e18cc730 	orr	ip, ip, r0, lsr r7
++     66c:	e1a0a000 	mov	sl, r0
++     670:	e21c2001 	ands	r2, ip, #1
++     674:	0a000015 	beq	6d0 <kbase_job_done+0x228>
++     678:	e51b003c 	ldr	r0, [fp, #-60]	; 0x3c
++     67c:	ebfffffe 	bl	0 <sc_active_jobs>
++     680:	e2507000 	subs	r7, r0, #0
++     684:	c51b607c 	ldrgt	r6, [fp, #-124]	; 0x7c
++     688:	ca000003 	bgt	69c <kbase_job_done+0x1f4>
++     68c:	ea000017 	b	6f0 <kbase_job_done+0x248>
++     690:	e1cd40f0 	strd	r4, [sp]
++     694:	e58d8008 	str	r8, [sp, #8]
++     698:	ebfffffe 	bl	328 <kbase_job_done_slot>
++     69c:	e3a02001 	mov	r2, #1
++     6a0:	e1570002 	cmp	r7, r2
++     6a4:	e1a00009 	mov	r0, r9
++     6a8:	e1a01006 	mov	r1, r6
++     6ac:	e2477001 	sub	r7, r7, #1
++     6b0:	1afffff6 	bne	690 <kbase_job_done+0x1e8>
++     6b4:	e50b607c 	str	r6, [fp, #-124]	; 0x7c
++     6b8:	e14b65d4 	ldrd	r6, [fp, #-84]	; 0xffffffac
++     6bc:	e51b2048 	ldr	r2, [fp, #-72]	; 0x48
++     6c0:	e58d8008 	str	r8, [sp, #8]
++     6c4:	e1cd60f0 	strd	r6, [sp]
++     6c8:	ebfffffe 	bl	328 <kbase_job_done_slot>
++     6cc:	ea00000c 	b	704 <kbase_job_done+0x25c>
++     6d0:	e1a00009 	mov	r0, r9
++     6d4:	e3a01a01 	mov	r1, #4096	; 0x1000
++     6d8:	ebfffffe 	bl	0 <kbase_reg_read>
++     6dc:	e51bc04c 	ldr	ip, [fp, #-76]	; 0x4c
++     6e0:	e110000c 	tst	r0, ip
++     6e4:	151b6038 	ldrne	r6, [fp, #-56]	; 0x38
++     6e8:	118aa006 	orrne	sl, sl, r6
++     6ec:	eaffffe1 	b	678 <kbase_job_done+0x1d0>
++     6f0:	e3001000 	movw	r1, #0
++     6f4:	e5990524 	ldr	r0, [r9, #1316]	; 0x524
++     6f8:	e3401000 	movt	r1, #0
++     6fc:	e51b207c 	ldr	r2, [fp, #-124]	; 0x7c
++     700:	ebfffffe 	bl	0 <dev_warn>
++     704:	e1a00009 	mov	r0, r9
++     708:	e3a01a01 	mov	r1, #4096	; 0x1000
++     70c:	e3a02000 	mov	r2, #0
++     710:	ebfffffe 	bl	0 <kbase_reg_read>
++     714:	e302315c 	movw	r3, #8540	; 0x215c
++     718:	e7993003 	ldr	r3, [r9, r3]
++     71c:	e3130602 	tst	r3, #2097152	; 0x200000
++     720:	e1a0c000 	mov	ip, r0
++     724:	0a000002 	beq	734 <kbase_job_done+0x28c>
++     728:	e51b7038 	ldr	r7, [fp, #-56]	; 0x38
++     72c:	e11a0007 	tst	sl, r7
++     730:	1a00001e 	bne	7b0 <kbase_job_done+0x308>
++     734:	e1a0182c 	lsr	r1, ip, #16
++     738:	e6ff007c 	uxth	r0, ip
++     73c:	e51b6038 	ldr	r6, [fp, #-56]	; 0x38
++     740:	e1803001 	orr	r3, r0, r1
++     744:	e1130006 	tst	r3, r6
++     748:	1affffaf 	bne	60c <kbase_job_done+0x164>
++     74c:	e51b703c 	ldr	r7, [fp, #-60]	; 0x3c
++     750:	e1a0a00c 	mov	sl, ip
++     754:	e14b23d4 	ldrd	r2, [fp, #-52]	; 0xffffffcc
++     758:	e5d7e049 	ldrb	lr, [r7, #73]	; 0x49
++     75c:	e35e0000 	cmp	lr, #0
++     760:	0a00000f 	beq	7a4 <kbase_job_done+0x2fc>
++     764:	e5d76048 	ldrb	r6, [r7, #72]	; 0x48
++     768:	e30b41e0 	movw	r4, #45536	; 0xb1e0
++     76c:	e34f4fff 	movt	r4, #65535	; 0xffff
++     770:	e3e05000 	mvn	r5, #0
++     774:	e0944002 	adds	r4, r4, r2
++     778:	e3a0ef5a 	mov	lr, #360	; 0x168
++     77c:	e0a55003 	adc	r5, r5, r3
++     780:	e206300f 	and	r3, r6, #15
++     784:	e0873103 	add	r3, r7, r3, lsl #2
++     788:	e5936004 	ldr	r6, [r3, #4]
++     78c:	e18620de 	ldrd	r2, [r6, lr]
++     790:	e0542002 	subs	r2, r4, r2
++     794:	e0c53003 	sbc	r3, r5, r3
++     798:	e3520000 	cmp	r2, #0
++     79c:	e2d3c000 	sbcs	ip, r3, #0
++     7a0:	a18640fe 	strdge	r4, [r6, lr]
++     7a4:	e35a0000 	cmp	sl, #0
++     7a8:	1affff75 	bne	584 <kbase_job_done+0xdc>
++     7ac:	eaffff5d 	b	528 <kbase_job_done+0x80>
++     7b0:	e1a00009 	mov	r0, r9
++     7b4:	e51b1058 	ldr	r1, [fp, #-88]	; 0x58
++     7b8:	e3a02000 	mov	r2, #0
++     7bc:	e50bc078 	str	ip, [fp, #-120]	; 0x78
++     7c0:	ebfffffe 	bl	0 <kbase_reg_read>
++     7c4:	e51bc078 	ldr	ip, [fp, #-120]	; 0x78
++     7c8:	e3500000 	cmp	r0, #0
++     7cc:	018cc007 	orreq	ip, ip, r7
++     7d0:	eaffffd7 	b	734 <kbase_job_done+0x28c>
++     7d4:	e1a00009 	mov	r0, r9
++     7d8:	ebfffe30 	bl	a0 <kbasep_try_reset_gpu_early>
++     7dc:	e24bd028 	sub	sp, fp, #40	; 0x28
++     7e0:	e89daff0 	ldm	sp, {r4, r5, r6, r7, r8, r9, sl, fp, sp, pc}
++     7e4:	e51b1058 	ldr	r1, [fp, #-88]	; 0x58
++     7e8:	e3a02000 	mov	r2, #0
++     7ec:	e1a00009 	mov	r0, r9
++     7f0:	e50bc078 	str	ip, [fp, #-120]	; 0x78
++     7f4:	ebfffffe 	bl	0 <kbase_reg_read>
++     7f8:	e50b0048 	str	r0, [fp, #-72]	; 0x48
++     7fc:	e1a01000 	mov	r1, r0
++     800:	e3000000 	movw	r0, #0
++     804:	e3400000 	movt	r0, #0
++     808:	ebfffffe 	bl	0 <printk>
++     80c:	e51b7048 	ldr	r7, [fp, #-72]	; 0x48
++     810:	e51bc078 	ldr	ip, [fp, #-120]	; 0x78
++     814:	e3570000 	cmp	r7, #0
++     818:	0a000012 	beq	868 <kbase_job_done+0x3c0>
++     81c:	e3570003 	cmp	r7, #3
++     820:	1a000012 	bne	870 <kbase_job_done+0x3c8>
++     824:	e51b105c 	ldr	r1, [fp, #-92]	; 0x5c
++     828:	e3a02000 	mov	r2, #0
++     82c:	e1a00009 	mov	r0, r9
++     830:	ebfffffe 	bl	0 <kbase_reg_read>
++     834:	e51b1060 	ldr	r1, [fp, #-96]	; 0x60
++     838:	e3a02000 	mov	r2, #0
++     83c:	e1a0a000 	mov	sl, r0
++     840:	e1a00009 	mov	r0, r9
++     844:	ebfffffe 	bl	0 <kbase_reg_read>
++     848:	e51bc078 	ldr	ip, [fp, #-120]	; 0x78
++     84c:	e50b0070 	str	r0, [fp, #-112]	; 0x70
++     850:	e3a00000 	mov	r0, #0
++     854:	e50b0074 	str	r0, [fp, #-116]	; 0x74
++     858:	e14b67d4 	ldrd	r6, [fp, #-116]	; 0xffffff8c
++     85c:	e186600a 	orr	r6, r6, sl
++     860:	e14b65f4 	strd	r6, [fp, #-84]	; 0xffffffac
++     864:	eaffff70 	b	62c <kbase_job_done+0x184>
++     868:	e3a07004 	mov	r7, #4
++     86c:	e50b7048 	str	r7, [fp, #-72]	; 0x48
++     870:	e51b0048 	ldr	r0, [fp, #-72]	; 0x48
++     874:	e3a06000 	mov	r6, #0
++     878:	e599a524 	ldr	sl, [r9, #1316]	; 0x524
++     87c:	e3a07000 	mov	r7, #0
++     880:	e50bc078 	str	ip, [fp, #-120]	; 0x78
++     884:	ebfffffe 	bl	0 <kbase_exception_name>
++     888:	e3001000 	movw	r1, #0
++     88c:	e51b207c 	ldr	r2, [fp, #-124]	; 0x7c
++     890:	e3401000 	movt	r1, #0
++     894:	e51b3048 	ldr	r3, [fp, #-72]	; 0x48
++     898:	e14b65f4 	strd	r6, [fp, #-84]	; 0xffffffac
++     89c:	e58d0000 	str	r0, [sp]
++     8a0:	e1a0000a 	mov	r0, sl
++     8a4:	ebfffffe 	bl	0 <dev_warn>
++     8a8:	e51bc078 	ldr	ip, [fp, #-120]	; 0x78
++     8ac:	eaffff5e 	b	62c <kbase_job_done+0x184>
++
++000008b0 <kbasep_job_slot_soft_or_hard_stop_do_action>:
++     8b0:	e1a0c00d 	mov	ip, sp
++     8b4:	e92ddff8 	push	{r3, r4, r5, r6, r7, r8, r9, sl, fp, ip, lr, pc}
++     8b8:	e24cb004 	sub	fp, ip, #4
++     8bc:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++     8c0:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++     8c4:	e59b8004 	ldr	r8, [fp, #4]
++     8c8:	e3520002 	cmp	r2, #2
++     8cc:	e1a06002 	mov	r6, r2
++     8d0:	e1a05000 	mov	r5, r0
++     8d4:	e1a09001 	mov	r9, r1
++     8d8:	e598a180 	ldr	sl, [r8, #384]	; 0x180
++     8dc:	0a000012 	beq	92c <kbasep_job_slot_soft_or_hard_stop_do_action+0x7c>
++     8e0:	e3520003 	cmp	r2, #3
++     8e4:	1a000005 	bne	900 <kbasep_job_slot_soft_or_hard_stop_do_action+0x50>
++     8e8:	e3022158 	movw	r2, #8536	; 0x2158
++     8ec:	e7902002 	ldr	r2, [r0, r2]
++     8f0:	e3120801 	tst	r2, #65536	; 0x10000
++     8f4:	0a000001 	beq	900 <kbasep_job_slot_soft_or_hard_stop_do_action+0x50>
++     8f8:	e3130004 	tst	r3, #4
++     8fc:	1a00003b 	bne	9f0 <kbasep_job_slot_soft_or_hard_stop_do_action+0x140>
++     900:	e3022158 	movw	r2, #8536	; 0x2158
++     904:	e3023164 	movw	r3, #8548	; 0x2164
++     908:	e7952002 	ldr	r2, [r5, r2]
++     90c:	e7953003 	ldr	r3, [r5, r3]
++     910:	e3130001 	tst	r3, #1
++     914:	0a00002b 	beq	9c8 <kbasep_job_slot_soft_or_hard_stop_do_action+0x118>
++     918:	e5983234 	ldr	r3, [r8, #564]	; 0x234
++     91c:	e3130008 	tst	r3, #8
++     920:	03a06005 	moveq	r6, #5
++     924:	13a06007 	movne	r6, #7
++     928:	ea000026 	b	9c8 <kbasep_job_slot_soft_or_hard_stop_do_action+0x118>
++     92c:	e3022158 	movw	r2, #8536	; 0x2158
++     930:	e7902002 	ldr	r2, [r0, r2]
++     934:	e3120701 	tst	r2, #262144	; 0x40000
++     938:	0a000001 	beq	944 <kbasep_job_slot_soft_or_hard_stop_do_action+0x94>
++     93c:	e3130004 	tst	r3, #4
++     940:	189daff8 	ldmne	sp, {r3, r4, r5, r6, r7, r8, r9, sl, fp, sp, pc}
++     944:	e5983234 	ldr	r3, [r8, #564]	; 0x234
++     948:	e3022158 	movw	r2, #8536	; 0x2158
++     94c:	e3833002 	orr	r3, r3, #2
++     950:	e5883234 	str	r3, [r8, #564]	; 0x234
++     954:	e7952002 	ldr	r2, [r5, r2]
++     958:	e3120901 	tst	r2, #16384	; 0x4000
++     95c:	0a000029 	beq	a08 <kbasep_job_slot_soft_or_hard_stop_do_action+0x158>
++     960:	e3a0704c 	mov	r7, #76	; 0x4c
++     964:	e0275997 	mla	r7, r7, r9, r5
++     968:	e5d73049 	ldrb	r3, [r7, #73]	; 0x49
++     96c:	e3530000 	cmp	r3, #0
++     970:	0a00000c 	beq	9a8 <kbasep_job_slot_soft_or_hard_stop_do_action+0xf8>
++     974:	e3a04000 	mov	r4, #0
++     978:	e5d73048 	ldrb	r3, [r7, #72]	; 0x48
++     97c:	e1a00005 	mov	r0, r5
++     980:	e0843003 	add	r3, r4, r3
++     984:	e2844001 	add	r4, r4, #1
++     988:	e203300f 	and	r3, r3, #15
++     98c:	e0873103 	add	r3, r7, r3, lsl #2
++     990:	e5932004 	ldr	r2, [r3, #4]
++     994:	e5921180 	ldr	r1, [r2, #384]	; 0x180
++     998:	ebfffffe 	bl	0 <kbase_as_poking_timer_retain_atom>
++     99c:	e5d73049 	ldrb	r3, [r7, #73]	; 0x49
++     9a0:	e1530004 	cmp	r3, r4
++     9a4:	cafffff3 	bgt	978 <kbasep_job_slot_soft_or_hard_stop_do_action+0xc8>
++     9a8:	e3023164 	movw	r3, #8548	; 0x2164
++     9ac:	e7953003 	ldr	r3, [r5, r3]
++     9b0:	e3130001 	tst	r3, #1
++     9b4:	0a000003 	beq	9c8 <kbasep_job_slot_soft_or_hard_stop_do_action+0x118>
++     9b8:	e5983234 	ldr	r3, [r8, #564]	; 0x234
++     9bc:	e3130008 	tst	r3, #8
++     9c0:	03a06004 	moveq	r6, #4
++     9c4:	13a06006 	movne	r6, #6
++     9c8:	e1a09389 	lsl	r9, r9, #7
++     9cc:	e1a00005 	mov	r0, r5
++     9d0:	e2899b06 	add	r9, r9, #6144	; 0x1800
++     9d4:	e1a02006 	mov	r2, r6
++     9d8:	e2899020 	add	r9, r9, #32
++     9dc:	e1a0300a 	mov	r3, sl
++     9e0:	e30f1fe0 	movw	r1, #65504	; 0xffe0
++     9e4:	e0011009 	and	r1, r1, r9
++     9e8:	ebfffffe 	bl	0 <kbase_reg_write>
++     9ec:	e89daff8 	ldm	sp, {r3, r4, r5, r6, r7, r8, r9, sl, fp, sp, pc}
++     9f0:	e1a02003 	mov	r2, r3
++     9f4:	e3001000 	movw	r1, #0
++     9f8:	e5900524 	ldr	r0, [r0, #1316]	; 0x524
++     9fc:	e3401000 	movt	r1, #0
++     a00:	ebfffffe 	bl	0 <dev_warn>
++     a04:	e89daff8 	ldm	sp, {r3, r4, r5, r6, r7, r8, r9, sl, fp, sp, pc}
++     a08:	e3022164 	movw	r2, #8548	; 0x2164
++     a0c:	e7952002 	ldr	r2, [r5, r2]
++     a10:	e3120001 	tst	r2, #1
++     a14:	1affffe8 	bne	9bc <kbasep_job_slot_soft_or_hard_stop_do_action+0x10c>
++     a18:	eaffffea 	b	9c8 <kbasep_job_slot_soft_or_hard_stop_do_action+0x118>
++
++00000a1c <kbasep_job_slot_soft_or_hard_stop>:
++     a1c:	e1a0c00d 	mov	ip, sp
++     a20:	e92ddff0 	push	{r4, r5, r6, r7, r8, r9, sl, fp, ip, lr, pc}
++     a24:	e24cb004 	sub	fp, ip, #4
++     a28:	e24dd03c 	sub	sp, sp, #60	; 0x3c
++     a2c:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++     a30:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++     a34:	e300c000 	movw	ip, #0
++     a38:	e1a09000 	mov	r9, r0
++     a3c:	e340c000 	movt	ip, #0
++     a40:	e302e164 	movw	lr, #8548	; 0x2164
++     a44:	e50b2030 	str	r2, [fp, #-48]	; 0x30
++     a48:	e799200e 	ldr	r2, [r9, lr]
++     a4c:	e3a0604c 	mov	r6, #76	; 0x4c
++     a50:	e59c0000 	ldr	r0, [ip]
++     a54:	e1a07001 	mov	r7, r1
++     a58:	e2022001 	and	r2, r2, #1
++     a5c:	e50b203c 	str	r2, [fp, #-60]	; 0x3c
++     a60:	e51b2030 	ldr	r2, [fp, #-48]	; 0x30
++     a64:	e3500000 	cmp	r0, #0
++     a68:	e1a0c003 	mov	ip, r3
++     a6c:	e0269296 	mla	r6, r6, r2, r9
++     a70:	1a000079 	bne	c5c <kbasep_job_slot_soft_or_hard_stop+0x240>
++     a74:	e5d68049 	ldrb	r8, [r6, #73]	; 0x49
++     a78:	e3580002 	cmp	r8, #2
++     a7c:	82484002 	subhi	r4, r8, #2
++     a80:	93a04000 	movls	r4, #0
++     a84:	86ef4074 	uxtbhi	r4, r4
++     a88:	e1540008 	cmp	r4, r8
++     a8c:	2a000070 	bcs	c54 <kbasep_job_slot_soft_or_hard_stop+0x238>
++     a90:	e51be030 	ldr	lr, [fp, #-48]	; 0x30
++     a94:	e1a0a00c 	mov	sl, ip
++     a98:	e1a0338e 	lsl	r3, lr, #7
++     a9c:	e6ff3073 	uxth	r3, r3
++     aa0:	e2833d61 	add	r3, r3, #6208	; 0x1840
++     aa4:	e2831020 	add	r1, r3, #32
++     aa8:	e2832004 	add	r2, r3, #4
++     aac:	e6ff3073 	uxth	r3, r3
++     ab0:	e50b3040 	str	r3, [fp, #-64]	; 0x40
++     ab4:	e6ff1071 	uxth	r1, r1
++     ab8:	e6ff2072 	uxth	r2, r2
++     abc:	e50b1038 	str	r1, [fp, #-56]	; 0x38
++     ac0:	e50b2044 	str	r2, [fp, #-68]	; 0x44
++     ac4:	ea000006 	b	ae4 <kbasep_job_slot_soft_or_hard_stop+0xc8>
++     ac8:	e5953180 	ldr	r3, [r5, #384]	; 0x180
++     acc:	e1530007 	cmp	r3, r7
++     ad0:	0a00000a 	beq	b00 <kbasep_job_slot_soft_or_hard_stop+0xe4>
++     ad4:	e2844001 	add	r4, r4, #1
++     ad8:	e6ef4074 	uxtb	r4, r4
++     adc:	e1580004 	cmp	r8, r4
++     ae0:	9a00005b 	bls	c54 <kbasep_job_slot_soft_or_hard_stop+0x238>
++     ae4:	e5d63048 	ldrb	r3, [r6, #72]	; 0x48
++     ae8:	e3570000 	cmp	r7, #0
++     aec:	e0843003 	add	r3, r4, r3
++     af0:	e203300f 	and	r3, r3, #15
++     af4:	e0863103 	add	r3, r6, r3, lsl #2
++     af8:	e5935004 	ldr	r5, [r3, #4]
++     afc:	1afffff1 	bne	ac8 <kbasep_job_slot_soft_or_hard_stop+0xac>
++     b00:	e15a0005 	cmp	sl, r5
++     b04:	135a0000 	cmpne	sl, #0
++     b08:	13a0c001 	movne	ip, #1
++     b0c:	03a0c000 	moveq	ip, #0
++     b10:	1affffef 	bne	ad4 <kbasep_job_slot_soft_or_hard_stop+0xb8>
++     b14:	e3a02e1e 	mov	r2, #480	; 0x1e0
++     b18:	e0643008 	rsb	r3, r4, r8
++     b1c:	e19520b2 	ldrh	r2, [r5, r2]
++     b20:	e3530001 	cmp	r3, #1
++     b24:	e50b2034 	str	r2, [fp, #-52]	; 0x34
++     b28:	0a000058 	beq	c90 <kbasep_job_slot_soft_or_hard_stop+0x274>
++     b2c:	e3530002 	cmp	r3, #2
++     b30:	1affffe7 	bne	ad4 <kbasep_job_slot_soft_or_hard_stop+0xb8>
++     b34:	e1a0200c 	mov	r2, ip
++     b38:	e1a00009 	mov	r0, r9
++     b3c:	e51b1038 	ldr	r1, [fp, #-56]	; 0x38
++     b40:	ebfffffe 	bl	0 <kbase_reg_read>
++     b44:	e3500000 	cmp	r0, #0
++     b48:	0affffe1 	beq	ad4 <kbasep_job_slot_soft_or_hard_stop+0xb8>
++     b4c:	e51bc03c 	ldr	ip, [fp, #-60]	; 0x3c
++     b50:	e35c0000 	cmp	ip, #0
++     b54:	1a000034 	bne	c2c <kbasep_job_slot_soft_or_hard_stop+0x210>
++     b58:	e1a0200c 	mov	r2, ip
++     b5c:	e1a00009 	mov	r0, r9
++     b60:	e51b1038 	ldr	r1, [fp, #-56]	; 0x38
++     b64:	e1a0300c 	mov	r3, ip
++     b68:	ebfffffe 	bl	0 <kbase_reg_write>
++     b6c:	e1a00009 	mov	r0, r9
++     b70:	e51b1040 	ldr	r1, [fp, #-64]	; 0x40
++     b74:	e51b203c 	ldr	r2, [fp, #-60]	; 0x3c
++     b78:	ebfffffe 	bl	0 <kbase_reg_read>
++     b7c:	e3500000 	cmp	r0, #0
++     b80:	1a000005 	bne	b9c <kbasep_job_slot_soft_or_hard_stop+0x180>
++     b84:	e1a00009 	mov	r0, r9
++     b88:	e51b1044 	ldr	r1, [fp, #-68]	; 0x44
++     b8c:	e51b203c 	ldr	r2, [fp, #-60]	; 0x3c
++     b90:	ebfffffe 	bl	0 <kbase_reg_read>
++     b94:	e3500000 	cmp	r0, #0
++     b98:	0affffcd 	beq	ad4 <kbasep_job_slot_soft_or_hard_stop+0xb8>
++     b9c:	e5d61049 	ldrb	r1, [r6, #73]	; 0x49
++     ba0:	e3a02000 	mov	r2, #0
++     ba4:	e5d6c048 	ldrb	ip, [r6, #72]	; 0x48
++     ba8:	e1a03002 	mov	r3, r2
++     bac:	e2411001 	sub	r1, r1, #1
++     bb0:	e1a00009 	mov	r0, r9
++     bb4:	e2488001 	sub	r8, r8, #1
++     bb8:	e6ef1071 	uxtb	r1, r1
++     bbc:	e5c61049 	strb	r1, [r6, #73]	; 0x49
++     bc0:	e081100c 	add	r1, r1, ip
++     bc4:	e6ef8078 	uxtb	r8, r8
++     bc8:	e201e00f 	and	lr, r1, #15
++     bcc:	e51b1040 	ldr	r1, [fp, #-64]	; 0x40
++     bd0:	e086e10e 	add	lr, r6, lr, lsl #2
++     bd4:	e50be054 	str	lr, [fp, #-84]	; 0x54
++     bd8:	e59ee004 	ldr	lr, [lr, #4]
++     bdc:	e50be058 	str	lr, [fp, #-88]	; 0x58
++     be0:	e51bc058 	ldr	ip, [fp, #-88]	; 0x58
++     be4:	e59ee008 	ldr	lr, [lr, #8]
++     be8:	e3cee002 	bic	lr, lr, #2
++     bec:	e58ce008 	str	lr, [ip, #8]
++     bf0:	e51be054 	ldr	lr, [fp, #-84]	; 0x54
++     bf4:	e59ec004 	ldr	ip, [lr, #4]
++     bf8:	e50bc048 	str	ip, [fp, #-72]	; 0x48
++     bfc:	ebfffffe 	bl	0 <kbase_reg_write>
++     c00:	e3a02000 	mov	r2, #0
++     c04:	e1a00009 	mov	r0, r9
++     c08:	e1a03002 	mov	r3, r2
++     c0c:	e51b1044 	ldr	r1, [fp, #-68]	; 0x44
++     c10:	ebfffffe 	bl	0 <kbase_reg_write>
++     c14:	e51bc048 	ldr	ip, [fp, #-72]	; 0x48
++     c18:	e51b1030 	ldr	r1, [fp, #-48]	; 0x30
++     c1c:	e3a02000 	mov	r2, #0
++     c20:	e3a03002 	mov	r3, #2
++     c24:	e1a0000c 	mov	r0, ip
++     c28:	ebfffffe 	bl	0 <kbase_jd_done>
++     c2c:	e2844001 	add	r4, r4, #1
++     c30:	e58d5000 	str	r5, [sp]
++     c34:	e51b3034 	ldr	r3, [fp, #-52]	; 0x34
++     c38:	e1a00009 	mov	r0, r9
++     c3c:	e51b1030 	ldr	r1, [fp, #-48]	; 0x30
++     c40:	e6ef4074 	uxtb	r4, r4
++     c44:	e59b2004 	ldr	r2, [fp, #4]
++     c48:	ebfffffe 	bl	8b0 <kbasep_job_slot_soft_or_hard_stop_do_action>
++     c4c:	e1580004 	cmp	r8, r4
++     c50:	8affffa3 	bhi	ae4 <kbasep_job_slot_soft_or_hard_stop+0xc8>
++     c54:	e24bd028 	sub	sp, fp, #40	; 0x28
++     c58:	e89daff0 	ldm	sp, {r4, r5, r6, r7, r8, r9, sl, fp, sp, pc}
++     c5c:	e2890d22 	add	r0, r9, #2176	; 0x880
++     c60:	e50b3048 	str	r3, [fp, #-72]	; 0x48
++     c64:	ebfffffe 	bl	0 <lock_is_held>
++     c68:	e51bc048 	ldr	ip, [fp, #-72]	; 0x48
++     c6c:	e3500000 	cmp	r0, #0
++     c70:	1affff7f 	bne	a74 <kbasep_job_slot_soft_or_hard_stop+0x58>
++     c74:	e3000000 	movw	r0, #0
++     c78:	e3a01fbe 	mov	r1, #760	; 0x2f8
++     c7c:	e3400000 	movt	r0, #0
++     c80:	e50bc048 	str	ip, [fp, #-72]	; 0x48
++     c84:	ebfffffe 	bl	0 <warn_slowpath_null>
++     c88:	e51bc048 	ldr	ip, [fp, #-72]	; 0x48
++     c8c:	eaffff78 	b	a74 <kbasep_job_slot_soft_or_hard_stop+0x58>
++     c90:	e1a0200c 	mov	r2, ip
++     c94:	e1a00009 	mov	r0, r9
++     c98:	e51b1038 	ldr	r1, [fp, #-56]	; 0x38
++     c9c:	e50bc048 	str	ip, [fp, #-72]	; 0x48
++     ca0:	ebfffffe 	bl	0 <kbase_reg_read>
++     ca4:	e51bc048 	ldr	ip, [fp, #-72]	; 0x48
++     ca8:	e3500000 	cmp	r0, #0
++     cac:	0affffde 	beq	c2c <kbasep_job_slot_soft_or_hard_stop+0x210>
++     cb0:	e1a0200c 	mov	r2, ip
++     cb4:	e1a0300c 	mov	r3, ip
++     cb8:	e1a00009 	mov	r0, r9
++     cbc:	e51b1038 	ldr	r1, [fp, #-56]	; 0x38
++     cc0:	e50bc048 	str	ip, [fp, #-72]	; 0x48
++     cc4:	ebfffffe 	bl	0 <kbase_reg_write>
++     cc8:	e51bc048 	ldr	ip, [fp, #-72]	; 0x48
++     ccc:	e1a00009 	mov	r0, r9
++     cd0:	e51b1040 	ldr	r1, [fp, #-64]	; 0x40
++     cd4:	e1a0200c 	mov	r2, ip
++     cd8:	ebfffffe 	bl	0 <kbase_reg_read>
++     cdc:	e2502000 	subs	r2, r0, #0
++     ce0:	0a000024 	beq	d78 <kbasep_job_slot_soft_or_hard_stop+0x35c>
++     ce4:	e5d61049 	ldrb	r1, [r6, #73]	; 0x49
++     ce8:	e3a02000 	mov	r2, #0
++     cec:	e5d6c048 	ldrb	ip, [r6, #72]	; 0x48
++     cf0:	e1a03002 	mov	r3, r2
++     cf4:	e2411001 	sub	r1, r1, #1
++     cf8:	e1a00009 	mov	r0, r9
++     cfc:	e2488001 	sub	r8, r8, #1
++     d00:	e6ef1071 	uxtb	r1, r1
++     d04:	e5c61049 	strb	r1, [r6, #73]	; 0x49
++     d08:	e081100c 	add	r1, r1, ip
++     d0c:	e6ef8078 	uxtb	r8, r8
++     d10:	e201c00f 	and	ip, r1, #15
++     d14:	e51b1040 	ldr	r1, [fp, #-64]	; 0x40
++     d18:	e086c10c 	add	ip, r6, ip, lsl #2
++     d1c:	e59ce004 	ldr	lr, [ip, #4]
++     d20:	e59e5008 	ldr	r5, [lr, #8]
++     d24:	e3c55002 	bic	r5, r5, #2
++     d28:	e58e5008 	str	r5, [lr, #8]
++     d2c:	e59c5004 	ldr	r5, [ip, #4]
++     d30:	ebfffffe 	bl	0 <kbase_reg_write>
++     d34:	e3a02000 	mov	r2, #0
++     d38:	e1a00009 	mov	r0, r9
++     d3c:	e1a03002 	mov	r3, r2
++     d40:	e51b1044 	ldr	r1, [fp, #-68]	; 0x44
++     d44:	ebfffffe 	bl	0 <kbase_reg_write>
++     d48:	e51bc03c 	ldr	ip, [fp, #-60]	; 0x3c
++     d4c:	e1a00005 	mov	r0, r5
++     d50:	e51b1030 	ldr	r1, [fp, #-48]	; 0x30
++     d54:	e35c0000 	cmp	ip, #0
++     d58:	e3a02000 	mov	r2, #0
++     d5c:	15d6304a 	ldrbne	r3, [r6, #74]	; 0x4a
++     d60:	116f3f13 	clzne	r3, r3
++     d64:	11a032a3 	lsrne	r3, r3, #5
++     d68:	15c6304a 	strbne	r3, [r6, #74]	; 0x4a
++     d6c:	e3a03002 	mov	r3, #2
++     d70:	ebfffffe 	bl	0 <kbase_jd_done>
++     d74:	eaffff56 	b	ad4 <kbasep_job_slot_soft_or_hard_stop+0xb8>
++     d78:	e1a00009 	mov	r0, r9
++     d7c:	e51b1044 	ldr	r1, [fp, #-68]	; 0x44
++     d80:	ebfffffe 	bl	0 <kbase_reg_read>
++     d84:	e3500000 	cmp	r0, #0
++     d88:	1affffd5 	bne	ce4 <kbasep_job_slot_soft_or_hard_stop+0x2c8>
++     d8c:	eaffffa6 	b	c2c <kbasep_job_slot_soft_or_hard_stop+0x210>
++
++00000d90 <kbase_job_slot_init>:
++     d90:	e1a0c00d 	mov	ip, sp
++     d94:	e92dd800 	push	{fp, ip, lr, pc}
++     d98:	e24cb004 	sub	fp, ip, #4
++     d9c:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++     da0:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++     da4:	e301ef34 	movw	lr, #7988	; 0x1f34
++     da8:	e7d0300e 	ldrb	r3, [r0, lr]
++     dac:	e1a01000 	mov	r1, r0
++     db0:	e3530000 	cmp	r3, #0
++     db4:	13a02000 	movne	r2, #0
++     db8:	11a03001 	movne	r3, r1
++     dbc:	11a00002 	movne	r0, r2
++     dc0:	0a000007 	beq	de4 <kbase_job_slot_init+0x54>
++     dc4:	e5831000 	str	r1, [r3]
++     dc8:	e2822001 	add	r2, r2, #1
++     dcc:	e5c30049 	strb	r0, [r3, #73]	; 0x49
++     dd0:	e283304c 	add	r3, r3, #76	; 0x4c
++     dd4:	e5430004 	strb	r0, [r3, #-4]
++     dd8:	e7d1c00e 	ldrb	ip, [r1, lr]
++     ddc:	e15c0002 	cmp	ip, r2
++     de0:	cafffff7 	bgt	dc4 <kbase_job_slot_init+0x34>
++     de4:	e3a00000 	mov	r0, #0
++     de8:	e58114c0 	str	r1, [r1, #1216]	; 0x4c0
++     dec:	e5c10509 	strb	r0, [r1, #1289]	; 0x509
++     df0:	e5c10508 	strb	r0, [r1, #1288]	; 0x508
++     df4:	e89da800 	ldm	sp, {fp, sp, pc}
++
++00000df8 <kbase_job_slot_halt>:
++     df8:	e1a0c00d 	mov	ip, sp
++     dfc:	e92dd800 	push	{fp, ip, lr, pc}
++     e00:	e24cb004 	sub	fp, ip, #4
++     e04:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++     e08:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++     e0c:	e89da800 	ldm	sp, {fp, sp, pc}
++
++00000e10 <kbase_job_slot_term>:
++     e10:	e1a0c00d 	mov	ip, sp
++     e14:	e92dd800 	push	{fp, ip, lr, pc}
++     e18:	e24cb004 	sub	fp, ip, #4
++     e1c:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++     e20:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++     e24:	e89da800 	ldm	sp, {fp, sp, pc}
++
++00000e28 <kbase_job_slot_softstop>:
++     e28:	e1a0c00d 	mov	ip, sp
++     e2c:	e92dd800 	push	{fp, ip, lr, pc}
++     e30:	e24cb004 	sub	fp, ip, #4
++     e34:	e24dd008 	sub	sp, sp, #8
++     e38:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++     e3c:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++     e40:	e3a0c002 	mov	ip, #2
++     e44:	e1a03002 	mov	r3, r2
++     e48:	e58dc000 	str	ip, [sp]
++     e4c:	e1a02001 	mov	r2, r1
++     e50:	e3a01000 	mov	r1, #0
++     e54:	ebfffef0 	bl	a1c <kbasep_job_slot_soft_or_hard_stop>
++     e58:	e24bd00c 	sub	sp, fp, #12
++     e5c:	e89da800 	ldm	sp, {fp, sp, pc}
++
++00000e60 <kbase_debug_dump_registers>:
++     e60:	e1a0c00d 	mov	ip, sp
++     e64:	e92dd9f0 	push	{r4, r5, r6, r7, r8, fp, ip, lr, pc}
++     e68:	e24cb004 	sub	fp, ip, #4
++     e6c:	e24dd00c 	sub	sp, sp, #12
++     e70:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++     e74:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++     e78:	e3001000 	movw	r1, #0
++     e7c:	e1a04000 	mov	r4, r0
++     e80:	e3401000 	movt	r1, #0
++     e84:	e5900524 	ldr	r0, [r0, #1316]	; 0x524
++     e88:	ebfffffe 	bl	0 <dev_err>
++     e8c:	e3a01020 	mov	r1, #32
++     e90:	e3a02000 	mov	r2, #0
++     e94:	e1a00004 	mov	r0, r4
++     e98:	e5946524 	ldr	r6, [r4, #1316]	; 0x524
++     e9c:	ebfffffe 	bl	0 <kbase_reg_read>
++     ea0:	e3a01034 	mov	r1, #52	; 0x34
++     ea4:	e3a02000 	mov	r2, #0
++     ea8:	e1a05000 	mov	r5, r0
++     eac:	e1a00004 	mov	r0, r4
++     eb0:	ebfffffe 	bl	0 <kbase_reg_read>
++     eb4:	e1a02005 	mov	r2, r5
++     eb8:	e3001000 	movw	r1, #0
++     ebc:	e3401000 	movt	r1, #0
++     ec0:	e1a03000 	mov	r3, r0
++     ec4:	e1a00006 	mov	r0, r6
++     ec8:	ebfffffe 	bl	0 <dev_err>
++     ecc:	e3a01a01 	mov	r1, #4096	; 0x1000
++     ed0:	e3a02000 	mov	r2, #0
++     ed4:	e1a00004 	mov	r0, r4
++     ed8:	e5946524 	ldr	r6, [r4, #1316]	; 0x524
++     edc:	ebfffffe 	bl	0 <kbase_reg_read>
++     ee0:	e3011010 	movw	r1, #4112	; 0x1010
++     ee4:	e3a02000 	mov	r2, #0
++     ee8:	e1a07000 	mov	r7, r0
++     eec:	e1a00004 	mov	r0, r4
++     ef0:	ebfffffe 	bl	0 <kbase_reg_read>
++     ef4:	e3011014 	movw	r1, #4116	; 0x1014
++     ef8:	e3a02000 	mov	r2, #0
++     efc:	e1a05000 	mov	r5, r0
++     f00:	e1a00004 	mov	r0, r4
++     f04:	ebfffffe 	bl	0 <kbase_reg_read>
++     f08:	e1a03005 	mov	r3, r5
++     f0c:	e3001000 	movw	r1, #0
++     f10:	e1a02007 	mov	r2, r7
++     f14:	e3401000 	movt	r1, #0
++     f18:	e3a05000 	mov	r5, #0
++     f1c:	e58d0000 	str	r0, [sp]
++     f20:	e1a00006 	mov	r0, r6
++     f24:	ebfffffe 	bl	0 <dev_err>
++     f28:	e1a06385 	lsl	r6, r5, #7
++     f2c:	e3a02000 	mov	r2, #0
++     f30:	e30f1ffc 	movw	r1, #65532	; 0xfffc
++     f34:	e1a00004 	mov	r0, r4
++     f38:	e6ff6076 	uxth	r6, r6
++     f3c:	e5947524 	ldr	r7, [r4, #1316]	; 0x524
++     f40:	e2866b06 	add	r6, r6, #6144	; 0x1800
++     f44:	e2863024 	add	r3, r6, #36	; 0x24
++     f48:	e0011003 	and	r1, r1, r3
++     f4c:	ebfffffe 	bl	0 <kbase_reg_read>
++     f50:	e3a02000 	mov	r2, #0
++     f54:	e30f1f80 	movw	r1, #65408	; 0xff80
++     f58:	e0011006 	and	r1, r1, r6
++     f5c:	e1a08000 	mov	r8, r0
++     f60:	e1a00004 	mov	r0, r4
++     f64:	ebfffffe 	bl	0 <kbase_reg_read>
++     f68:	e58d5000 	str	r5, [sp]
++     f6c:	e1a02005 	mov	r2, r5
++     f70:	e1a03008 	mov	r3, r8
++     f74:	e3001000 	movw	r1, #0
++     f78:	e2855001 	add	r5, r5, #1
++     f7c:	e3401000 	movt	r1, #0
++     f80:	e58d0004 	str	r0, [sp, #4]
++     f84:	e1a00007 	mov	r0, r7
++     f88:	ebfffffe 	bl	0 <dev_err>
++     f8c:	e3550003 	cmp	r5, #3
++     f90:	1affffe4 	bne	f28 <kbase_debug_dump_registers+0xc8>
++     f94:	e1a00004 	mov	r0, r4
++     f98:	e3a01a02 	mov	r1, #8192	; 0x2000
++     f9c:	e3a02000 	mov	r2, #0
++     fa0:	e5946524 	ldr	r6, [r4, #1316]	; 0x524
++     fa4:	ebfffffe 	bl	0 <kbase_reg_read>
++     fa8:	e3a0103c 	mov	r1, #60	; 0x3c
++     fac:	e3a02000 	mov	r2, #0
++     fb0:	e1a05000 	mov	r5, r0
++     fb4:	e1a00004 	mov	r0, r4
++     fb8:	ebfffffe 	bl	0 <kbase_reg_read>
++     fbc:	e1a02005 	mov	r2, r5
++     fc0:	e3001000 	movw	r1, #0
++     fc4:	e3401000 	movt	r1, #0
++     fc8:	e1a03000 	mov	r3, r0
++     fcc:	e1a00006 	mov	r0, r6
++     fd0:	ebfffffe 	bl	0 <dev_err>
++     fd4:	e1a00004 	mov	r0, r4
++     fd8:	e3a01028 	mov	r1, #40	; 0x28
++     fdc:	e3a02000 	mov	r2, #0
++     fe0:	e5945524 	ldr	r5, [r4, #1316]	; 0x524
++     fe4:	ebfffffe 	bl	0 <kbase_reg_read>
++     fe8:	e3011008 	movw	r1, #4104	; 0x1008
++     fec:	e3a02000 	mov	r2, #0
++     ff0:	e1a07000 	mov	r7, r0
++     ff4:	e1a00004 	mov	r0, r4
++     ff8:	ebfffffe 	bl	0 <kbase_reg_read>
++     ffc:	e3021008 	movw	r1, #8200	; 0x2008
++    1000:	e3a02000 	mov	r2, #0
++    1004:	e1a06000 	mov	r6, r0
++    1008:	e1a00004 	mov	r0, r4
++    100c:	ebfffffe 	bl	0 <kbase_reg_read>
++    1010:	e1a03006 	mov	r3, r6
++    1014:	e1a02007 	mov	r2, r7
++    1018:	e3001000 	movw	r1, #0
++    101c:	e3401000 	movt	r1, #0
++    1020:	e58d0000 	str	r0, [sp]
++    1024:	e1a00005 	mov	r0, r5
++    1028:	ebfffffe 	bl	0 <dev_err>
++    102c:	e1a00004 	mov	r0, r4
++    1030:	e3a01054 	mov	r1, #84	; 0x54
++    1034:	e3a02000 	mov	r2, #0
++    1038:	e5946524 	ldr	r6, [r4, #1316]	; 0x524
++    103c:	ebfffffe 	bl	0 <kbase_reg_read>
++    1040:	e3a01058 	mov	r1, #88	; 0x58
++    1044:	e3a02000 	mov	r2, #0
++    1048:	e1a05000 	mov	r5, r0
++    104c:	e1a00004 	mov	r0, r4
++    1050:	ebfffffe 	bl	0 <kbase_reg_read>
++    1054:	e1a02005 	mov	r2, r5
++    1058:	e3001000 	movw	r1, #0
++    105c:	e3401000 	movt	r1, #0
++    1060:	e1a03000 	mov	r3, r0
++    1064:	e1a00006 	mov	r0, r6
++    1068:	ebfffffe 	bl	0 <dev_err>
++    106c:	e1a00004 	mov	r0, r4
++    1070:	e3001f04 	movw	r1, #3844	; 0xf04
++    1074:	e3a02000 	mov	r2, #0
++    1078:	e5946524 	ldr	r6, [r4, #1316]	; 0x524
++    107c:	ebfffffe 	bl	0 <kbase_reg_read>
++    1080:	e3001f0c 	movw	r1, #3852	; 0xf0c
++    1084:	e3a02000 	mov	r2, #0
++    1088:	e1a05000 	mov	r5, r0
++    108c:	e1a00004 	mov	r0, r4
++    1090:	ebfffffe 	bl	0 <kbase_reg_read>
++    1094:	e1a02005 	mov	r2, r5
++    1098:	e3001000 	movw	r1, #0
++    109c:	e3401000 	movt	r1, #0
++    10a0:	e1a03000 	mov	r3, r0
++    10a4:	e1a00006 	mov	r0, r6
++    10a8:	ebfffffe 	bl	0 <dev_err>
++    10ac:	e24bd020 	sub	sp, fp, #32
++    10b0:	e89da9f0 	ldm	sp, {r4, r5, r6, r7, r8, fp, sp, pc}
++
++000010b4 <kbasep_reset_timeout_worker>:
++    10b4:	e1a0c00d 	mov	ip, sp
++    10b8:	e92ddff0 	push	{r4, r5, r6, r7, r8, r9, sl, fp, ip, lr, pc}
++    10bc:	e24cb004 	sub	fp, ip, #4
++    10c0:	e24dd05c 	sub	sp, sp, #92	; 0x5c
++    10c4:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++    10c8:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++    10cc:	e24ba04c 	sub	sl, fp, #76	; 0x4c
++    10d0:	e2404d92 	sub	r4, r0, #9344	; 0x2480
++    10d4:	e1a09000 	mov	r9, r0
++    10d8:	e2446038 	sub	r6, r4, #56	; 0x38
++    10dc:	e1a0000a 	mov	r0, sl
++    10e0:	e50b4060 	str	r4, [fp, #-96]	; 0x60
++    10e4:	ebfffffe 	bl	0 <ktime_get>
++    10e8:	e2860c25 	add	r0, r6, #9472	; 0x2500
++    10ec:	ebfffffe 	bl	0 <hrtimer_cancel>
++    10f0:	e3a01002 	mov	r1, #2
++    10f4:	e1a00006 	mov	r0, r6
++    10f8:	ebfffffe 	bl	0 <kbase_pm_context_active_handle_suspend>
++    10fc:	e2501000 	subs	r1, r0, #0
++    1100:	1a00009b 	bne	1374 <kbasep_reset_timeout_worker+0x2c0>
++    1104:	e2865e59 	add	r5, r6, #1424	; 0x590
++    1108:	e24940e0 	sub	r4, r9, #224	; 0xe0
++    110c:	e50b5068 	str	r5, [fp, #-104]	; 0x68
++    1110:	e1a00005 	mov	r0, r5
++    1114:	e50b4074 	str	r4, [fp, #-116]	; 0x74
++    1118:	ebfffffe 	bl	0 <mutex_lock_nested>
++    111c:	e3a02f7d 	mov	r2, #500	; 0x1f4
++    1120:	e3001000 	movw	r1, #0
++    1124:	e5960524 	ldr	r0, [r6, #1316]	; 0x524
++    1128:	e3401000 	movt	r1, #0
++    112c:	ebfffffe 	bl	0 <dev_err>
++    1130:	e51b0074 	ldr	r0, [fp, #-116]	; 0x74
++    1134:	ebfffffe 	bl	0 <_raw_spin_lock_irqsave>
++    1138:	e5193084 	ldr	r3, [r9, #-132]	; 0x84
++    113c:	e3530006 	cmp	r3, #6
++    1140:	e1a07000 	mov	r7, r0
++    1144:	0a00013c 	beq	163c <kbasep_reset_timeout_worker+0x588>
++    1148:	e51930c0 	ldr	r3, [r9, #-192]	; 0xc0
++    114c:	e3530000 	cmp	r3, #0
++    1150:	e50b3058 	str	r3, [fp, #-88]	; 0x58
++    1154:	0a00008f 	beq	1398 <kbasep_reset_timeout_worker+0x2e4>
++    1158:	e1a02003 	mov	r2, r3
++    115c:	e3a01060 	mov	r1, #96	; 0x60
++    1160:	e1a00006 	mov	r0, r6
++    1164:	e3a05000 	mov	r5, #0
++    1168:	ebfffffe 	bl	0 <kbase_reg_read>
++    116c:	e3a01064 	mov	r1, #100	; 0x64
++    1170:	e51b2058 	ldr	r2, [fp, #-88]	; 0x58
++    1174:	e1a08000 	mov	r8, r0
++    1178:	e1a00006 	mov	r0, r6
++    117c:	ebfffffe 	bl	0 <kbase_reg_read>
++    1180:	e50b5054 	str	r5, [fp, #-84]	; 0x54
++    1184:	e3a0106c 	mov	r1, #108	; 0x6c
++    1188:	e51b2058 	ldr	r2, [fp, #-88]	; 0x58
++    118c:	e50b0050 	str	r0, [fp, #-80]	; 0x50
++    1190:	e1a00006 	mov	r0, r6
++    1194:	e14b45d4 	ldrd	r4, [fp, #-84]	; 0xffffffac
++    1198:	e1844008 	orr	r4, r4, r8
++    119c:	e14b45f4 	strd	r4, [fp, #-84]	; 0xffffffac
++    11a0:	ebfffffe 	bl	0 <kbase_reg_read>
++    11a4:	e3a01070 	mov	r1, #112	; 0x70
++    11a8:	e51b2058 	ldr	r2, [fp, #-88]	; 0x58
++    11ac:	e50b005c 	str	r0, [fp, #-92]	; 0x5c
++    11b0:	e1a00006 	mov	r0, r6
++    11b4:	ebfffffe 	bl	0 <kbase_reg_read>
++    11b8:	e3a01074 	mov	r1, #116	; 0x74
++    11bc:	e51b2058 	ldr	r2, [fp, #-88]	; 0x58
++    11c0:	e50b006c 	str	r0, [fp, #-108]	; 0x6c
++    11c4:	e1a00006 	mov	r0, r6
++    11c8:	ebfffffe 	bl	0 <kbase_reg_read>
++    11cc:	e3a01078 	mov	r1, #120	; 0x78
++    11d0:	e51b2058 	ldr	r2, [fp, #-88]	; 0x58
++    11d4:	e50b0070 	str	r0, [fp, #-112]	; 0x70
++    11d8:	e1a00006 	mov	r0, r6
++    11dc:	ebfffffe 	bl	0 <kbase_reg_read>
++    11e0:	e51b2058 	ldr	r2, [fp, #-88]	; 0x58
++    11e4:	e3a0107c 	mov	r1, #124	; 0x7c
++    11e8:	e50b0064 	str	r0, [fp, #-100]	; 0x64
++    11ec:	e1a00006 	mov	r0, r6
++    11f0:	ebfffffe 	bl	0 <kbase_reg_read>
++    11f4:	e1a08000 	mov	r8, r0
++    11f8:	e1a00006 	mov	r0, r6
++    11fc:	e3a05000 	mov	r5, #0
++    1200:	ebfffffe 	bl	e60 <kbase_debug_dump_registers>
++    1204:	e3a03006 	mov	r3, #6
++    1208:	e5194084 	ldr	r4, [r9, #-132]	; 0x84
++    120c:	e1a00006 	mov	r0, r6
++    1210:	e5093084 	str	r3, [r9, #-132]	; 0x84
++    1214:	e5095088 	str	r5, [r9, #-136]	; 0x88
++    1218:	ebfffffe 	bl	0 <kbase_pm_disable_interrupts>
++    121c:	e1a00006 	mov	r0, r6
++    1220:	ebfffffe 	bl	0 <kbase_synchronize_irqs>
++    1224:	e1a01007 	mov	r1, r7
++    1228:	e51b0074 	ldr	r0, [fp, #-116]	; 0x74
++    122c:	ebfffffe 	bl	0 <_raw_spin_unlock_irqrestore>
++    1230:	e3a01001 	mov	r1, #1
++    1234:	e1a00006 	mov	r0, r6
++    1238:	ebfffffe 	bl	0 <kbase_pm_init_hw>
++    123c:	e51b0074 	ldr	r0, [fp, #-116]	; 0x74
++    1240:	ebfffffe 	bl	0 <_raw_spin_lock_irqsave>
++    1244:	e51970c0 	ldr	r7, [r9, #-192]	; 0xc0
++    1248:	e1570005 	cmp	r7, r5
++    124c:	e50b0058 	str	r0, [fp, #-88]	; 0x58
++    1250:	0a00003b 	beq	1344 <kbasep_reset_timeout_worker+0x290>
++    1254:	e30433a4 	movw	r3, #17316	; 0x43a4
++    1258:	e3403002 	movt	r3, #2
++    125c:	e1a00006 	mov	r0, r6
++    1260:	e3a01068 	mov	r1, #104	; 0x68
++    1264:	e7972003 	ldr	r2, [r7, r3]
++    1268:	e1a03007 	mov	r3, r7
++    126c:	e1a02202 	lsl	r2, r2, #4
++    1270:	ebfffffe 	bl	0 <kbase_reg_write>
++    1274:	e1a00006 	mov	r0, r6
++    1278:	e3a01060 	mov	r1, #96	; 0x60
++    127c:	e51b2054 	ldr	r2, [fp, #-84]	; 0x54
++    1280:	e1a03007 	mov	r3, r7
++    1284:	ebfffffe 	bl	0 <kbase_reg_write>
++    1288:	e1a00006 	mov	r0, r6
++    128c:	e51b2050 	ldr	r2, [fp, #-80]	; 0x50
++    1290:	e3a01064 	mov	r1, #100	; 0x64
++    1294:	e1a03007 	mov	r3, r7
++    1298:	ebfffffe 	bl	0 <kbase_reg_write>
++    129c:	e1a00006 	mov	r0, r6
++    12a0:	e51b205c 	ldr	r2, [fp, #-92]	; 0x5c
++    12a4:	e3a0106c 	mov	r1, #108	; 0x6c
++    12a8:	e1a03007 	mov	r3, r7
++    12ac:	ebfffffe 	bl	0 <kbase_reg_write>
++    12b0:	e1a00006 	mov	r0, r6
++    12b4:	e51b206c 	ldr	r2, [fp, #-108]	; 0x6c
++    12b8:	e3a01070 	mov	r1, #112	; 0x70
++    12bc:	e1a03007 	mov	r3, r7
++    12c0:	ebfffffe 	bl	0 <kbase_reg_write>
++    12c4:	e1a00006 	mov	r0, r6
++    12c8:	e51b2064 	ldr	r2, [fp, #-100]	; 0x64
++    12cc:	e3a01078 	mov	r1, #120	; 0x78
++    12d0:	e1a03007 	mov	r3, r7
++    12d4:	ebfffffe 	bl	0 <kbase_reg_write>
++    12d8:	e1a00006 	mov	r0, r6
++    12dc:	e1a02008 	mov	r2, r8
++    12e0:	e3a0107c 	mov	r1, #124	; 0x7c
++    12e4:	e1a03007 	mov	r3, r7
++    12e8:	ebfffffe 	bl	0 <kbase_reg_write>
++    12ec:	e5193360 	ldr	r3, [r9, #-864]	; 0x360
++    12f0:	e3130c01 	tst	r3, #256	; 0x100
++    12f4:	e1a03007 	mov	r3, r7
++    12f8:	11a02005 	movne	r2, r5
++    12fc:	11a00006 	movne	r0, r6
++    1300:	13a01074 	movne	r1, #116	; 0x74
++    1304:	01a00006 	moveq	r0, r6
++    1308:	03a01074 	moveq	r1, #116	; 0x74
++    130c:	051b2070 	ldreq	r2, [fp, #-112]	; 0x70
++    1310:	ebfffffe 	bl	0 <kbase_reg_write>
++    1314:	e30433a4 	movw	r3, #17316	; 0x43a4
++    1318:	e3403002 	movt	r3, #2
++    131c:	e1a00006 	mov	r0, r6
++    1320:	e3a01068 	mov	r1, #104	; 0x68
++    1324:	e7972003 	ldr	r2, [r7, r3]
++    1328:	e1a03007 	mov	r3, r7
++    132c:	e1a02202 	lsl	r2, r2, #4
++    1330:	e3822001 	orr	r2, r2, #1
++    1334:	ebfffffe 	bl	0 <kbase_reg_write>
++    1338:	e5193360 	ldr	r3, [r9, #-864]	; 0x360
++    133c:	e3130c01 	tst	r3, #256	; 0x100
++    1340:	1a0000b7 	bne	1624 <kbasep_reset_timeout_worker+0x570>
++    1344:	e5094084 	str	r4, [r9, #-132]	; 0x84
++    1348:	e3540007 	cmp	r4, #7
++    134c:	979ff104 	ldrls	pc, [pc, r4, lsl #2]
++    1350:	ea000069 	b	14fc <kbasep_reset_timeout_worker+0x448>
++    1354:	000014dc 	ldrdeq	r1, [r0], -ip
++    1358:	000014dc 	ldrdeq	r1, [r0], -ip
++    135c:	000014b4 			; <UNDEFINED> instruction: 0x000014b4
++    1360:	00001498 	muleq	r0, r8, r4
++    1364:	000013bc 			; <UNDEFINED> instruction: 0x000013bc
++    1368:	00001498 	muleq	r0, r8, r4
++    136c:	000014fc 	strdeq	r1, [r0], -ip
++    1370:	000014dc 	ldrdeq	r1, [r0], -ip
++    1374:	e2860d93 	add	r0, r6, #9408	; 0x24c0
++    1378:	e3a03000 	mov	r3, #0
++    137c:	e2800018 	add	r0, r0, #24
++    1380:	e5093008 	str	r3, [r9, #-8]
++    1384:	e3a01003 	mov	r1, #3
++    1388:	e3a02001 	mov	r2, #1
++    138c:	ebfffffe 	bl	0 <__wake_up>
++    1390:	e24bd028 	sub	sp, fp, #40	; 0x28
++    1394:	e89daff0 	ldm	sp, {r4, r5, r6, r7, r8, r9, sl, fp, sp, pc}
++    1398:	e51b8058 	ldr	r8, [fp, #-88]	; 0x58
++    139c:	e3a04000 	mov	r4, #0
++    13a0:	e3a05000 	mov	r5, #0
++    13a4:	e14b45f4 	strd	r4, [fp, #-84]	; 0xffffffac
++    13a8:	e50b8064 	str	r8, [fp, #-100]	; 0x64
++    13ac:	e50b8070 	str	r8, [fp, #-112]	; 0x70
++    13b0:	e50b806c 	str	r8, [fp, #-108]	; 0x6c
++    13b4:	e50b805c 	str	r8, [fp, #-92]	; 0x5c
++    13b8:	eaffff8e 	b	11f8 <kbasep_reset_timeout_worker+0x144>
++    13bc:	e2860b09 	add	r0, r6, #9216	; 0x2400
++    13c0:	e3a03005 	mov	r3, #5
++    13c4:	e2800038 	add	r0, r0, #56	; 0x38
++    13c8:	e5093084 	str	r3, [r9, #-132]	; 0x84
++    13cc:	e3a01003 	mov	r1, #3
++    13d0:	e3a02001 	mov	r2, #1
++    13d4:	e3a03000 	mov	r3, #0
++    13d8:	ebfffffe 	bl	0 <__wake_up>
++    13dc:	e51b0074 	ldr	r0, [fp, #-116]	; 0x74
++    13e0:	e51b1058 	ldr	r1, [fp, #-88]	; 0x58
++    13e4:	ebfffffe 	bl	0 <_raw_spin_unlock_irqrestore>
++    13e8:	e2493d71 	sub	r3, r9, #7232	; 0x1c40
++    13ec:	e2433008 	sub	r3, r3, #8
++    13f0:	e50b3058 	str	r3, [fp, #-88]	; 0x58
++    13f4:	e1a00003 	mov	r0, r3
++    13f8:	ebfffffe 	bl	0 <_raw_spin_lock_irqsave>
++    13fc:	e3013f34 	movw	r3, #7988	; 0x1f34
++    1400:	e7d63003 	ldrb	r3, [r6, r3]
++    1404:	e3530000 	cmp	r3, #0
++    1408:	e50b005c 	str	r0, [fp, #-92]	; 0x5c
++    140c:	0a00003c 	beq	1504 <kbasep_reset_timeout_worker+0x450>
++    1410:	e2498d91 	sub	r8, r9, #9280	; 0x2440
++    1414:	e2863c1f 	add	r3, r6, #7936	; 0x1f00
++    1418:	e248802c 	sub	r8, r8, #44	; 0x2c
++    141c:	e2833034 	add	r3, r3, #52	; 0x34
++    1420:	e3a04000 	mov	r4, #0
++    1424:	e50b3054 	str	r3, [fp, #-84]	; 0x54
++    1428:	e3a05000 	mov	r5, #0
++    142c:	e1a03006 	mov	r3, r6
++    1430:	e3a07000 	mov	r7, #0
++    1434:	e50b9064 	str	r9, [fp, #-100]	; 0x64
++    1438:	e5d39049 	ldrb	r9, [r3, #73]	; 0x49
++    143c:	e3590000 	cmp	r9, #0
++    1440:	0a00000c 	beq	1478 <kbasep_reset_timeout_worker+0x3c4>
++    1444:	e1a02007 	mov	r2, r7
++    1448:	e3001000 	movw	r1, #0
++    144c:	e5960524 	ldr	r0, [r6, #1316]	; 0x524
++    1450:	e3401000 	movt	r1, #0
++    1454:	ebfffffe 	bl	0 <dev_err>
++    1458:	e1cd40f0 	strd	r4, [sp]
++    145c:	e58da008 	str	sl, [sp, #8]
++    1460:	e1a00006 	mov	r0, r6
++    1464:	e1a01007 	mov	r1, r7
++    1468:	e3042002 	movw	r2, #16386	; 0x4002
++    146c:	ebfffffe 	bl	328 <kbase_job_done_slot>
++    1470:	e2599001 	subs	r9, r9, #1
++    1474:	1afffff2 	bne	1444 <kbasep_reset_timeout_worker+0x390>
++    1478:	e51b1054 	ldr	r1, [fp, #-84]	; 0x54
++    147c:	e2877001 	add	r7, r7, #1
++    1480:	e5d13000 	ldrb	r3, [r1]
++    1484:	e1530007 	cmp	r3, r7
++    1488:	da00001c 	ble	1500 <kbasep_reset_timeout_worker+0x44c>
++    148c:	e1a03008 	mov	r3, r8
++    1490:	e288804c 	add	r8, r8, #76	; 0x4c
++    1494:	eaffffe7 	b	1438 <kbasep_reset_timeout_worker+0x384>
++    1498:	e2860b09 	add	r0, r6, #9216	; 0x2400
++    149c:	e3a01003 	mov	r1, #3
++    14a0:	e2800038 	add	r0, r0, #56	; 0x38
++    14a4:	e3a02001 	mov	r2, #1
++    14a8:	e3a03000 	mov	r3, #0
++    14ac:	ebfffffe 	bl	0 <__wake_up>
++    14b0:	eaffffc9 	b	13dc <kbasep_reset_timeout_worker+0x328>
++    14b4:	e3a03001 	mov	r3, #1
++    14b8:	e2860b09 	add	r0, r6, #9216	; 0x2400
++    14bc:	e5093084 	str	r3, [r9, #-132]	; 0x84
++    14c0:	e1a02003 	mov	r2, r3
++    14c4:	e5093088 	str	r3, [r9, #-136]	; 0x88
++    14c8:	e2800008 	add	r0, r0, #8
++    14cc:	e3a01003 	mov	r1, #3
++    14d0:	e3a03000 	mov	r3, #0
++    14d4:	ebfffffe 	bl	0 <__wake_up>
++    14d8:	eaffffbf 	b	13dc <kbasep_reset_timeout_worker+0x328>
++    14dc:	e2860b09 	add	r0, r6, #9216	; 0x2400
++    14e0:	e3a02001 	mov	r2, #1
++    14e4:	e2800008 	add	r0, r0, #8
++    14e8:	e5092088 	str	r2, [r9, #-136]	; 0x88
++    14ec:	e3a01003 	mov	r1, #3
++    14f0:	e3a03000 	mov	r3, #0
++    14f4:	ebfffffe 	bl	0 <__wake_up>
++    14f8:	eaffffb7 	b	13dc <kbasep_reset_timeout_worker+0x328>
++    14fc:	e7f001f2 	udf	#18
++    1500:	e51b9064 	ldr	r9, [fp, #-100]	; 0x64
++    1504:	e51b0058 	ldr	r0, [fp, #-88]	; 0x58
++    1508:	e2497d53 	sub	r7, r9, #5312	; 0x14c0
++    150c:	e51b5058 	ldr	r5, [fp, #-88]	; 0x58
++    1510:	e2477014 	sub	r7, r7, #20
++    1514:	e51b105c 	ldr	r1, [fp, #-92]	; 0x5c
++    1518:	e1a08000 	mov	r8, r0
++    151c:	e2855e53 	add	r5, r5, #1328	; 0x530
++    1520:	e50b5054 	str	r5, [fp, #-84]	; 0x54
++    1524:	ebfffffe 	bl	0 <_raw_spin_unlock_irqrestore>
++    1528:	e3a01000 	mov	r1, #0
++    152c:	e51b0054 	ldr	r0, [fp, #-84]	; 0x54
++    1530:	e1a04001 	mov	r4, r1
++    1534:	ebfffffe 	bl	0 <mutex_lock_nested>
++    1538:	e51ba058 	ldr	sl, [fp, #-88]	; 0x58
++    153c:	e50b605c 	str	r6, [fp, #-92]	; 0x5c
++    1540:	e0695008 	rsb	r5, r9, r8
++    1544:	e08a5005 	add	r5, sl, r5
++    1548:	e2855d71 	add	r5, r5, #7232	; 0x1c40
++    154c:	e5953034 	ldr	r3, [r5, #52]	; 0x34
++    1550:	e3530000 	cmp	r3, #0
++    1554:	0a000008 	beq	157c <kbasep_reset_timeout_worker+0x4c8>
++    1558:	e0873004 	add	r3, r7, r4
++    155c:	e3a01000 	mov	r1, #0
++    1560:	e1a00003 	mov	r0, r3
++    1564:	e1a06003 	mov	r6, r3
++    1568:	ebfffffe 	bl	0 <mutex_lock_nested>
++    156c:	e5950034 	ldr	r0, [r5, #52]	; 0x34
++    1570:	ebfffffe 	bl	0 <kbase_mmu_update>
++    1574:	e1a00006 	mov	r0, r6
++    1578:	ebfffffe 	bl	0 <mutex_unlock>
++    157c:	e28440f8 	add	r4, r4, #248	; 0xf8
++    1580:	e2888008 	add	r8, r8, #8
++    1584:	e3540d3e 	cmp	r4, #3968	; 0xf80
++    1588:	1affffec 	bne	1540 <kbasep_reset_timeout_worker+0x48c>
++    158c:	e51b4060 	ldr	r4, [fp, #-96]	; 0x60
++    1590:	e3a03000 	mov	r3, #0
++    1594:	e51b605c 	ldr	r6, [fp, #-92]	; 0x5c
++    1598:	e3a02001 	mov	r2, #1
++    159c:	e2840d92 	add	r0, r4, #9344	; 0x2480
++    15a0:	e5093008 	str	r3, [r9, #-8]
++    15a4:	e2800020 	add	r0, r0, #32
++    15a8:	e3a01003 	mov	r1, #3
++    15ac:	ebfffffe 	bl	0 <__wake_up>
++    15b0:	e3001000 	movw	r1, #0
++    15b4:	e5960524 	ldr	r0, [r6, #1316]	; 0x524
++    15b8:	e3401000 	movt	r1, #0
++    15bc:	ebfffffe 	bl	0 <dev_err>
++    15c0:	e1a00006 	mov	r0, r6
++    15c4:	ebfffffe 	bl	0 <kbase_pm_update_cores_state>
++    15c8:	e1a00006 	mov	r0, r6
++    15cc:	ebfffffe 	bl	0 <kbase_pm_check_transitions_sync>
++    15d0:	e51b5058 	ldr	r5, [fp, #-88]	; 0x58
++    15d4:	e30035c2 	movw	r3, #1474	; 0x5c2
++    15d8:	e19530d3 	ldrsb	r3, [r5, r3]
++    15dc:	e3530000 	cmp	r3, #0
++    15e0:	da000007 	ble	1604 <kbasep_reset_timeout_worker+0x550>
++    15e4:	e1a00005 	mov	r0, r5
++    15e8:	ebfffffe 	bl	0 <_raw_spin_lock_irqsave>
++    15ec:	e1a04000 	mov	r4, r0
++    15f0:	e1a00006 	mov	r0, r6
++    15f4:	ebfffffe 	bl	0 <kbasep_js_try_run_next_job_nolock>
++    15f8:	e51b0058 	ldr	r0, [fp, #-88]	; 0x58
++    15fc:	e1a01004 	mov	r1, r4
++    1600:	ebfffffe 	bl	0 <_raw_spin_unlock_irqrestore>
++    1604:	e51b0054 	ldr	r0, [fp, #-84]	; 0x54
++    1608:	ebfffffe 	bl	0 <mutex_unlock>
++    160c:	e51b0068 	ldr	r0, [fp, #-104]	; 0x68
++    1610:	ebfffffe 	bl	0 <mutex_unlock>
++    1614:	e1a00006 	mov	r0, r6
++    1618:	ebfffffe 	bl	0 <kbase_pm_context_idle>
++    161c:	e24bd028 	sub	sp, fp, #40	; 0x28
++    1620:	e89daff0 	ldm	sp, {r4, r5, r6, r7, r8, r9, sl, fp, sp, pc}
++    1624:	e51b2070 	ldr	r2, [fp, #-112]	; 0x70
++    1628:	e1a03007 	mov	r3, r7
++    162c:	e1a00006 	mov	r0, r6
++    1630:	e3a01074 	mov	r1, #116	; 0x74
++    1634:	ebfffffe 	bl	0 <kbase_reg_write>
++    1638:	eaffff41 	b	1344 <kbasep_reset_timeout_worker+0x290>
++    163c:	e1a01000 	mov	r1, r0
++    1640:	e51b0074 	ldr	r0, [fp, #-116]	; 0x74
++    1644:	ebfffffe 	bl	0 <_raw_spin_unlock_irqrestore>
++    1648:	e5192088 	ldr	r2, [r9, #-136]	; 0x88
++    164c:	e3520000 	cmp	r2, #0
++    1650:	1a00001c 	bne	16c8 <kbasep_reset_timeout_worker+0x614>
++    1654:	e1a0500d 	mov	r5, sp
++    1658:	e3c53d7f 	bic	r3, r5, #8128	; 0x1fc0
++    165c:	e3c3303f 	bic	r3, r3, #63	; 0x3f
++    1660:	e2864b09 	add	r4, r6, #9216	; 0x2400
++    1664:	e2844008 	add	r4, r4, #8
++    1668:	e2497088 	sub	r7, r9, #136	; 0x88
++    166c:	e593100c 	ldr	r1, [r3, #12]
++    1670:	e3003000 	movw	r3, #0
++    1674:	e50b2040 	str	r2, [fp, #-64]	; 0x40
++    1678:	e3403000 	movt	r3, #0
++    167c:	e24b2034 	sub	r2, fp, #52	; 0x34
++    1680:	e50b3038 	str	r3, [fp, #-56]	; 0x38
++    1684:	e50b103c 	str	r1, [fp, #-60]	; 0x3c
++    1688:	e50b2034 	str	r2, [fp, #-52]	; 0x34
++    168c:	e50b2030 	str	r2, [fp, #-48]	; 0x30
++    1690:	e51b5074 	ldr	r5, [fp, #-116]	; 0x74
++    1694:	ea000000 	b	169c <kbasep_reset_timeout_worker+0x5e8>
++    1698:	ebfffffe 	bl	0 <schedule>
++    169c:	e1a00004 	mov	r0, r4
++    16a0:	e24b1040 	sub	r1, fp, #64	; 0x40
++    16a4:	e3a02002 	mov	r2, #2
++    16a8:	ebfffffe 	bl	0 <prepare_to_wait>
++    16ac:	e5973000 	ldr	r3, [r7]
++    16b0:	e3530000 	cmp	r3, #0
++    16b4:	0afffff7 	beq	1698 <kbasep_reset_timeout_worker+0x5e4>
++    16b8:	e1a00004 	mov	r0, r4
++    16bc:	e24b1040 	sub	r1, fp, #64	; 0x40
++    16c0:	e50b5074 	str	r5, [fp, #-116]	; 0x74
++    16c4:	ebfffffe 	bl	0 <finish_wait>
++    16c8:	e51b0074 	ldr	r0, [fp, #-116]	; 0x74
++    16cc:	ebfffffe 	bl	0 <_raw_spin_lock_irqsave>
++    16d0:	e1a07000 	mov	r7, r0
++    16d4:	eafffe9b 	b	1148 <kbasep_reset_timeout_worker+0x94>
++
++000016d8 <kbasep_reset_timer_callback>:
++    16d8:	e1a0c00d 	mov	ip, sp
++    16dc:	e92dd800 	push	{fp, ip, lr, pc}
++    16e0:	e24cb004 	sub	fp, ip, #4
++    16e4:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++    16e8:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++    16ec:	e1a02000 	mov	r2, r0
++    16f0:	e2403050 	sub	r3, r0, #80	; 0x50
++    16f4:	f57ff05f 	dmb	sy
++    16f8:	e3a01003 	mov	r1, #3
++    16fc:	e193ef9f 	ldrex	r14, [r3]
++    1700:	e3a0c000 	mov	ip, #0
++    1704:	e33e0002 	teq	lr, #2
++    1708:	0183cf91 	strexeq	ip, r1, [r3]
++    170c:	e35c0000 	cmp	ip, #0
++    1710:	1afffff9 	bne	16fc <kbasep_reset_timer_callback+0x24>
++    1714:	f57ff05f 	dmb	sy
++    1718:	e35e0002 	cmp	lr, #2
++    171c:	0a000001 	beq	1728 <kbasep_reset_timer_callback+0x50>
++    1720:	e3a00000 	mov	r0, #0
++    1724:	e89da800 	ldm	sp, {fp, sp, pc}
++    1728:	e512104c 	ldr	r1, [r2, #-76]	; 0x4c
++    172c:	e3a00008 	mov	r0, #8
++    1730:	e2422048 	sub	r2, r2, #72	; 0x48
++    1734:	ebfffffe 	bl	0 <queue_work_on>
++    1738:	e3a00000 	mov	r0, #0
++    173c:	e89da800 	ldm	sp, {fp, sp, pc}
++
++00001740 <kbase_prepare_to_reset_gpu_locked>:
++    1740:	e1a0c00d 	mov	ip, sp
++    1744:	e92dd8f0 	push	{r4, r5, r6, r7, fp, ip, lr, pc}
++    1748:	e24cb004 	sub	fp, ip, #4
++    174c:	e24dd008 	sub	sp, sp, #8
++    1750:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++    1754:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++    1758:	e2803d92 	add	r3, r0, #9344	; 0x2480
++    175c:	e1a05000 	mov	r5, r0
++    1760:	e2833030 	add	r3, r3, #48	; 0x30
++    1764:	f57ff05f 	dmb	sy
++    1768:	e3a01001 	mov	r1, #1
++    176c:	e1934f9f 	ldrex	r4, [r3]
++    1770:	e3a02000 	mov	r2, #0
++    1774:	e3340000 	teq	r4, #0
++    1778:	01832f91 	strexeq	r2, r1, [r3]
++    177c:	e3520000 	cmp	r2, #0
++    1780:	1afffff9 	bne	176c <kbase_prepare_to_reset_gpu_locked+0x2c>
++    1784:	f57ff05f 	dmb	sy
++    1788:	e3540000 	cmp	r4, #0
++    178c:	13a00000 	movne	r0, #0
++    1790:	1a00000f 	bne	17d4 <kbase_prepare_to_reset_gpu_locked+0x94>
++    1794:	e3017f34 	movw	r7, #7988	; 0x1f34
++    1798:	e7d53007 	ldrb	r3, [r5, r7]
++    179c:	e3530000 	cmp	r3, #0
++    17a0:	13a06002 	movne	r6, #2
++    17a4:	0a000009 	beq	17d0 <kbase_prepare_to_reset_gpu_locked+0x90>
++    17a8:	e3a01000 	mov	r1, #0
++    17ac:	e1a02004 	mov	r2, r4
++    17b0:	e1a03001 	mov	r3, r1
++    17b4:	e58d6000 	str	r6, [sp]
++    17b8:	e1a00005 	mov	r0, r5
++    17bc:	e2844001 	add	r4, r4, #1
++    17c0:	ebfffc95 	bl	a1c <kbasep_job_slot_soft_or_hard_stop>
++    17c4:	e7d53007 	ldrb	r3, [r5, r7]
++    17c8:	e1540003 	cmp	r4, r3
++    17cc:	bafffff5 	blt	17a8 <kbase_prepare_to_reset_gpu_locked+0x68>
++    17d0:	e3a00001 	mov	r0, #1
++    17d4:	e24bd01c 	sub	sp, fp, #28
++    17d8:	e89da8f0 	ldm	sp, {r4, r5, r6, r7, fp, sp, pc}
++
++000017dc <kbase_prepare_to_reset_gpu>:
++    17dc:	e1a0c00d 	mov	ip, sp
++    17e0:	e92dd878 	push	{r3, r4, r5, r6, fp, ip, lr, pc}
++    17e4:	e24cb004 	sub	fp, ip, #4
++    17e8:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++    17ec:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++    17f0:	e2804e87 	add	r4, r0, #2160	; 0x870
++    17f4:	e1a05000 	mov	r5, r0
++    17f8:	e1a00004 	mov	r0, r4
++    17fc:	ebfffffe 	bl	0 <_raw_spin_lock_irqsave>
++    1800:	e1a06000 	mov	r6, r0
++    1804:	e1a00005 	mov	r0, r5
++    1808:	ebfffffe 	bl	1740 <kbase_prepare_to_reset_gpu_locked>
++    180c:	e1a01006 	mov	r1, r6
++    1810:	e1a05000 	mov	r5, r0
++    1814:	e1a00004 	mov	r0, r4
++    1818:	ebfffffe 	bl	0 <_raw_spin_unlock_irqrestore>
++    181c:	e1a00005 	mov	r0, r5
++    1820:	e89da878 	ldm	sp, {r3, r4, r5, r6, fp, sp, pc}
++
++00001824 <kbase_reset_gpu>:
++    1824:	e1a0c00d 	mov	ip, sp
++    1828:	e92dd830 	push	{r4, r5, fp, ip, lr, pc}
++    182c:	e24cb004 	sub	fp, ip, #4
++    1830:	e24dd008 	sub	sp, sp, #8
++    1834:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++    1838:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++    183c:	e30234b0 	movw	r3, #9392	; 0x24b0
++    1840:	e3022534 	movw	r2, #9524	; 0x2534
++    1844:	e3a0c002 	mov	ip, #2
++    1848:	e7901002 	ldr	r1, [r0, r2]
++    184c:	e3a02010 	mov	r2, #16
++    1850:	e780c003 	str	ip, [r0, r3]
++    1854:	e1a04000 	mov	r4, r0
++    1858:	ebfffffe 	bl	0 <kbasep_get_config_value>
++    185c:	e3001000 	movw	r1, #0
++    1860:	e3401000 	movt	r1, #0
++    1864:	e1a05000 	mov	r5, r0
++    1868:	e1a02000 	mov	r2, r0
++    186c:	e5940524 	ldr	r0, [r4, #1316]	; 0x524
++    1870:	ebfffffe 	bl	0 <dev_err>
++    1874:	e3042240 	movw	r2, #16960	; 0x4240
++    1878:	e340200f 	movt	r2, #15
++    187c:	e3a01001 	mov	r1, #1
++    1880:	e3a03000 	mov	r3, #0
++    1884:	e58d1000 	str	r1, [sp]
++    1888:	e0020592 	mul	r2, r2, r5
++    188c:	e2840c25 	add	r0, r4, #9472	; 0x2500
++    1890:	ebfffffe 	bl	0 <hrtimer_start>
++    1894:	e1a00004 	mov	r0, r4
++    1898:	ebfffa00 	bl	a0 <kbasep_try_reset_gpu_early>
++    189c:	e24bd014 	sub	sp, fp, #20
++    18a0:	e89da830 	ldm	sp, {r4, r5, fp, sp, pc}
++
++000018a4 <kbase_reset_gpu_locked>:
++    18a4:	e1a0c00d 	mov	ip, sp
++    18a8:	e92dd830 	push	{r4, r5, fp, ip, lr, pc}
++    18ac:	e24cb004 	sub	fp, ip, #4
++    18b0:	e24dd008 	sub	sp, sp, #8
++    18b4:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++    18b8:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++    18bc:	e30234b0 	movw	r3, #9392	; 0x24b0
++    18c0:	e3022534 	movw	r2, #9524	; 0x2534
++    18c4:	e3a0c002 	mov	ip, #2
++    18c8:	e7901002 	ldr	r1, [r0, r2]
++    18cc:	e3a02010 	mov	r2, #16
++    18d0:	e780c003 	str	ip, [r0, r3]
++    18d4:	e1a04000 	mov	r4, r0
++    18d8:	ebfffffe 	bl	0 <kbasep_get_config_value>
++    18dc:	e3001000 	movw	r1, #0
++    18e0:	e3401000 	movt	r1, #0
++    18e4:	e1a05000 	mov	r5, r0
++    18e8:	e1a02000 	mov	r2, r0
++    18ec:	e5940524 	ldr	r0, [r4, #1316]	; 0x524
++    18f0:	ebfffffe 	bl	0 <dev_err>
++    18f4:	e3042240 	movw	r2, #16960	; 0x4240
++    18f8:	e340200f 	movt	r2, #15
++    18fc:	e3a01001 	mov	r1, #1
++    1900:	e3a03000 	mov	r3, #0
++    1904:	e58d1000 	str	r1, [sp]
++    1908:	e0020592 	mul	r2, r2, r5
++    190c:	e2840c25 	add	r0, r4, #9472	; 0x2500
++    1910:	ebfffffe 	bl	0 <hrtimer_start>
++    1914:	e1a00004 	mov	r0, r4
++    1918:	ebfff9b8 	bl	0 <kbasep_try_reset_gpu_early_locked>
++    191c:	e24bd014 	sub	sp, fp, #20
++    1920:	e89da830 	ldm	sp, {r4, r5, fp, sp, pc}
++
++00001924 <kbase_job_slot_hardstop>:
++    1924:	e1a0c00d 	mov	ip, sp
++    1928:	e92dd870 	push	{r4, r5, r6, fp, ip, lr, pc}
++    192c:	e24cb004 	sub	fp, ip, #4
++    1930:	e24dd00c 	sub	sp, sp, #12
++    1934:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++    1938:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++    193c:	e5905000 	ldr	r5, [r0]
++    1940:	e1a03001 	mov	r3, r1
++    1944:	e1a06002 	mov	r6, r2
++    1948:	e1a01000 	mov	r1, r0
++    194c:	e1a04000 	mov	r4, r0
++    1950:	e1a02003 	mov	r2, r3
++    1954:	e3a0c003 	mov	ip, #3
++    1958:	e1a03006 	mov	r3, r6
++    195c:	e1a00005 	mov	r0, r5
++    1960:	e58dc000 	str	ip, [sp]
++    1964:	ebfffc2c 	bl	a1c <kbasep_job_slot_soft_or_hard_stop>
++    1968:	e5941000 	ldr	r1, [r4]
++    196c:	e3023158 	movw	r3, #8536	; 0x2158
++    1970:	e7913003 	ldr	r3, [r1, r3]
++    1974:	e3130802 	tst	r3, #131072	; 0x20000
++    1978:	1a00000d 	bne	19b4 <kbase_job_slot_hardstop+0x90>
++    197c:	e302315c 	movw	r3, #8540	; 0x215c
++    1980:	e7913003 	ldr	r3, [r1, r3]
++    1984:	e3130008 	tst	r3, #8
++    1988:	1a000009 	bne	19b4 <kbase_job_slot_hardstop+0x90>
++    198c:	e3023160 	movw	r3, #8544	; 0x2160
++    1990:	e7913003 	ldr	r3, [r1, r3]
++    1994:	e3130080 	tst	r3, #128	; 0x80
++    1998:	0a000009 	beq	19c4 <kbase_job_slot_hardstop+0xa0>
++    199c:	e3560000 	cmp	r6, #0
++    19a0:	0a000003 	beq	19b4 <kbase_job_slot_hardstop+0x90>
++    19a4:	e3a03e1e 	mov	r3, #480	; 0x1e0
++    19a8:	e19630b3 	ldrh	r3, [r6, r3]
++    19ac:	e3130a02 	tst	r3, #8192	; 0x2000
++    19b0:	0a000003 	beq	19c4 <kbase_job_slot_hardstop+0xa0>
++    19b4:	e1a00005 	mov	r0, r5
++    19b8:	ebfffffe 	bl	1740 <kbase_prepare_to_reset_gpu_locked>
++    19bc:	e3500000 	cmp	r0, #0
++    19c0:	1a000001 	bne	19cc <kbase_job_slot_hardstop+0xa8>
++    19c4:	e24bd018 	sub	sp, fp, #24
++    19c8:	e89da870 	ldm	sp, {r4, r5, r6, fp, sp, pc}
++    19cc:	e5950524 	ldr	r0, [r5, #1316]	; 0x524
++    19d0:	e3001000 	movw	r1, #0
++    19d4:	e3401000 	movt	r1, #0
++    19d8:	ebfffffe 	bl	0 <dev_err>
++    19dc:	e1a00005 	mov	r0, r5
++    19e0:	ebfffffe 	bl	18a4 <kbase_reset_gpu_locked>
++    19e4:	e24bd018 	sub	sp, fp, #24
++    19e8:	e89da870 	ldm	sp, {r4, r5, r6, fp, sp, pc}
++
++000019ec <kbase_job_kill_jobs_from_context>:
++    19ec:	e1a0c00d 	mov	ip, sp
++    19f0:	e92ddbf0 	push	{r4, r5, r6, r7, r8, r9, fp, ip, lr, pc}
++    19f4:	e24cb004 	sub	fp, ip, #4
++    19f8:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++    19fc:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++    1a00:	e5904000 	ldr	r4, [r0]
++    1a04:	e1a05000 	mov	r5, r0
++    1a08:	e2846e87 	add	r6, r4, #2160	; 0x870
++    1a0c:	e1a00006 	mov	r0, r6
++    1a10:	ebfffffe 	bl	0 <_raw_spin_lock_irqsave>
++    1a14:	e1a02005 	mov	r2, r5
++    1a18:	e3a03c01 	mov	r3, #256	; 0x100
++    1a1c:	e304c002 	movw	ip, #16386	; 0x4002
++    1a20:	e1a07000 	mov	r7, r0
++    1a24:	e2533001 	subs	r3, r3, #1
++    1a28:	e582c49c 	str	ip, [r2, #1180]	; 0x49c
++    1a2c:	e2822d09 	add	r2, r2, #576	; 0x240
++    1a30:	1afffffb 	bne	1a24 <kbase_job_kill_jobs_from_context+0x38>
++    1a34:	e3019f34 	movw	r9, #7988	; 0x1f34
++    1a38:	e7d42009 	ldrb	r2, [r4, r9]
++    1a3c:	e3520000 	cmp	r2, #0
++    1a40:	11a08003 	movne	r8, r3
++    1a44:	0a000007 	beq	1a68 <kbase_job_kill_jobs_from_context+0x7c>
++    1a48:	e1a01008 	mov	r1, r8
++    1a4c:	e1a00005 	mov	r0, r5
++    1a50:	e3a02000 	mov	r2, #0
++    1a54:	e2888001 	add	r8, r8, #1
++    1a58:	ebfffffe 	bl	1924 <kbase_job_slot_hardstop>
++    1a5c:	e7d43009 	ldrb	r3, [r4, r9]
++    1a60:	e1530008 	cmp	r3, r8
++    1a64:	cafffff7 	bgt	1a48 <kbase_job_kill_jobs_from_context+0x5c>
++    1a68:	e1a00006 	mov	r0, r6
++    1a6c:	e1a01007 	mov	r1, r7
++    1a70:	ebfffffe 	bl	0 <_raw_spin_unlock_irqrestore>
++    1a74:	e89dabf0 	ldm	sp, {r4, r5, r6, r7, r8, r9, fp, sp, pc}
++
++00001a78 <kbase_job_zap_context>:
++    1a78:	e1a0c00d 	mov	ip, sp
++    1a7c:	e92ddff8 	push	{r3, r4, r5, r6, r7, r8, r9, sl, fp, ip, lr, pc}
++    1a80:	e24cb004 	sub	fp, ip, #4
++    1a84:	e52de004 	push	{lr}		; (str lr, [sp, #-4]!)
++    1a88:	ebfffffe 	bl	0 <__gnu_mcount_nc>
++    1a8c:	e1a07000 	mov	r7, r0
++    1a90:	e4975230 	ldr	r5, [r7], #560	; 0x230
++    1a94:	e1a04000 	mov	r4, r0
++    1a98:	e3a01000 	mov	r1, #0
++    1a9c:	e3a08001 	mov	r8, #1
++    1aa0:	e285aede 	add	sl, r5, #3552	; 0xde0
++    1aa4:	e2859e87 	add	r9, r5, #2160	; 0x870
++    1aa8:	e28aa008 	add	sl, sl, #8
++    1aac:	e1a00007 	mov	r0, r7
++    1ab0:	ebfffffe 	bl	0 <mutex_lock_nested>
++    1ab4:	e3a01000 	mov	r1, #0
++    1ab8:	e1a0000a 	mov	r0, sl
++    1abc:	e58482b8 	str	r8, [r4, #696]	; 0x2b8
++    1ac0:	ebfffffe 	bl	0 <mutex_lock_nested>
++    1ac4:	e2850ee3 	add	r0, r5, #3632	; 0xe30
++    1ac8:	e1a01004 	mov	r1, r4
++    1acc:	e2800008 	add	r0, r0, #8
++    1ad0:	ebfffffe 	bl	0 <kbasep_js_policy_try_evict_ctx>
++    1ad4:	e1a06000 	mov	r6, r0
++    1ad8:	e1a0000a 	mov	r0, sl
++    1adc:	ebfffffe 	bl	0 <mutex_unlock>
++    1ae0:	e3560000 	cmp	r6, #0
++    1ae4:	0a000006 	beq	1b04 <kbase_job_zap_context+0x8c>
++    1ae8:	e1a00005 	mov	r0, r5
++    1aec:	e1a01004 	mov	r1, r4
++    1af0:	e3a02000 	mov	r2, #0
++    1af4:	ebfffffe 	bl	0 <kbasep_js_runpool_requeue_or_kill_ctx>
++    1af8:	e1a00007 	mov	r0, r7
++    1afc:	ebfffffe 	bl	0 <mutex_unlock>
++    1b00:	e89daff8 	ldm	sp, {r3, r4, r5, r6, r7, r8, r9, sl, fp, sp, pc}
++    1b04:	e594328c 	ldr	r3, [r4, #652]	; 0x28c
++    1b08:	e3530000 	cmp	r3, #0
++    1b0c:	0afffff9 	beq	1af8 <kbase_job_zap_context+0x80>
++    1b10:	e1a00009 	mov	r0, r9
++    1b14:	ebfffffe 	bl	0 <_raw_spin_lock_irqsave>
++    1b18:	e30423a4 	movw	r2, #17316	; 0x43a4
++    1b1c:	e3402002 	movt	r2, #2
++    1b20:	e3a03e89 	mov	r3, #2192	; 0x890
++    1b24:	e1a01004 	mov	r1, r4
++    1b28:	e794c002 	ldr	ip, [r4, r2]
++    1b2c:	e19520b3 	ldrh	r2, [r5, r3]
++    1b30:	e1c28c18 	bic	r8, r2, r8, lsl ip
++    1b34:	e18580b3 	strh	r8, [r5, r3]
++    1b38:	e3018f34 	movw	r8, #7988	; 0x1f34
++    1b3c:	e1a0a000 	mov	sl, r0
++    1b40:	e1a00005 	mov	r0, r5
++    1b44:	ebfffffe 	bl	0 <kbasep_js_runpool_retain_ctx_nolock>
++    1b48:	e7d53008 	ldrb	r3, [r5, r8]
++    1b4c:	e3530000 	cmp	r3, #0
++    1b50:	0a000007 	beq	1b74 <kbase_job_zap_context+0xfc>
++    1b54:	e1a01006 	mov	r1, r6
++    1b58:	e1a00004 	mov	r0, r4
++    1b5c:	e3a02000 	mov	r2, #0
++    1b60:	e2866001 	add	r6, r6, #1
++    1b64:	ebfffffe 	bl	1924 <kbase_job_slot_hardstop>
++    1b68:	e7d53008 	ldrb	r3, [r5, r8]
++    1b6c:	e1530006 	cmp	r3, r6
++    1b70:	cafffff7 	bgt	1b54 <kbase_job_zap_context+0xdc>
++    1b74:	e1a0100a 	mov	r1, sl
++    1b78:	e1a00009 	mov	r0, r9
++    1b7c:	ebfffffe 	bl	0 <_raw_spin_unlock_irqrestore>
++    1b80:	e1a00007 	mov	r0, r7
++    1b84:	ebfffffe 	bl	0 <mutex_unlock>
++    1b88:	e1a00005 	mov	r0, r5
++    1b8c:	e1a01004 	mov	r1, r4
++    1b90:	ebfffffe 	bl	0 <kbasep_js_runpool_release_ctx>
++    1b94:	e89daff8 	ldm	sp, {r3, r4, r5, r6, r7, r8, r9, sl, fp, sp, pc}
++
++Disassembly of section .rodata.str:
++
++00000000 <.rodata.str>:
++   0:	76697264 	strbtvc	r7, [r9], -r4, ror #4
++   4:	2f737265 	svccs	0x00737265
++   8:	2f757067 	svccs	0x00757067
++   c:	2f6d7261 	svccs	0x006d7261
++  10:	6764696d 	strbvs	r6, [r4, -sp, ror #18]!
++  14:	2f647261 	svccs	0x00647261
++  18:	696c616d 	stmdbvs	ip!, {r0, r2, r3, r5, r6, r8, sp, lr}^
++  1c:	61626b5f 	cmnvs	r2, pc, asr fp
++  20:	6a5f6573 	bvs	17d95f4 <kbase_job_zap_context+0x17d7b7c>
++  24:	00632e6d 	rsbeq	r2, r3, sp, ror #28
++
++Disassembly of section __bug_table:
++
++00000000 <__bug_table>:
++   0:	000014fc 	strdeq	r1, [r0], -ip
++   4:	00000000 	andeq	r0, r0, r0
++   8:	00000535 	andeq	r0, r0, r5, lsr r5
++
++Disassembly of section .rodata.str1.4:
++
++00000000 <.LC0>:
++   0:	76697264 	strbtvc	r7, [r9], -r4, ror #4
++   4:	2f737265 	svccs	0x00737265
++   8:	2f757067 	svccs	0x00757067
++   c:	2f6d7261 	svccs	0x006d7261
++  10:	6764696d 	strbvs	r6, [r4, -sp, ror #18]!
++  14:	2f647261 	svccs	0x00647261
++  18:	696c616d 	stmdbvs	ip!, {r0, r2, r3, r5, r6, r8, sp, lr}^
++  1c:	61626b5f 	cmnvs	r2, pc, asr fp
++  20:	745f6573 	ldrbvc	r6, [pc], #-1395	; 28 <.LC0+0x28>
++  24:	65636172 	strbvs	r6, [r3, #-370]!	; 0x172
++  28:	6d69745f 	cfstrdvs	mvd7, [r9, #-380]!	; 0xfffffe84
++  2c:	6e696c65 	cdpvs	12, 6, cr6, cr9, cr5, {3}
++  30:	00682e65 	rsbeq	r2, r8, r5, ror #28
++
++00000034 <.LC1>:
++  34:	78783674 	ldmdavc	r8!, {r2, r4, r5, r6, r9, sl, ip, sp}^
++  38:	5047203a 	subpl	r2, r7, sl, lsr r0
++  3c:	61662055 	qdsubvs	r2, r5, r6
++  40:	20746c75 	rsbscs	r6, r4, r5, ror ip
++  44:	30257830 	eorcc	r7, r5, r0, lsr r8
++  48:	20786c32 	rsbscs	r6, r8, r2, lsr ip
++  4c:	6d6f7266 	sfmvs	f7, 2, [pc, #-408]!	; fffffebc <kbase_job_zap_context+0xffffe444>
++  50:	626f6a20 	rsbvs	r6, pc, #32, 20	; 0x20000
++  54:	6f6c7320 	svcvs	0x006c7320
++  58:	64252074 	strtvs	r2, [r5], #-116	; 0x74
++  5c:	0000000a 	andeq	r0, r0, sl
++
++00000060 <.LC2>:
++  60:	6f6a3101 	svcvs	0x006a3101
++  64:	6f642062 	svcvs	0x00642062
++  68:	6520656e 	strvs	r6, [r0, #-1390]!	; 0x56e
++  6c:	726f7272 	rsbvc	r7, pc, #536870919	; 0x20000007
++  70:	30203a20 	eorcc	r3, r0, r0, lsr #20
++  74:	38302578 	ldmdacc	r0!, {r3, r4, r5, r6, r8, sl, sp}
++  78:	00000a78 	andeq	r0, r0, r8, ror sl
++
++0000007c <.LC3>:
++  7c:	6f727265 	svcvs	0x00727265
++  80:	65642072 	strbvs	r2, [r4, #-114]!	; 0x72
++  84:	74636574 	strbtvc	r6, [r3], #-1396	; 0x574
++  88:	66206465 	strtvs	r6, [r0], -r5, ror #8
++  8c:	206d6f72 	rsbcs	r6, sp, r2, ror pc
++  90:	746f6c73 	strbtvc	r6, [pc], #-3187	; 98 <.LC3+0x1c>
++  94:	2c642520 	cfstr64cs	mvdx2, [r4], #-128	; 0xffffff80
++  98:	626f6a20 	rsbvs	r6, pc, #32, 20	; 0x20000
++  9c:	61747320 	cmnvs	r4, r0, lsr #6
++  a0:	20737574 	rsbscs	r7, r3, r4, ror r5
++  a4:	30257830 	eorcc	r7, r5, r0, lsr r8
++  a8:	28207838 	stmdacs	r0!, {r3, r4, r5, fp, ip, sp, lr}
++  ac:	00297325 	eoreq	r7, r9, r5, lsr #6
++
++000000b0 <.LC4>:
++  b0:	72757053 	rsbsvc	r7, r5, #83	; 0x53
++  b4:	73756f69 	cmnvc	r5, #420	; 0x1a4
++  b8:	746e6920 	strbtvc	r6, [lr], #-2336	; 0x920
++  bc:	75727265 	ldrbvc	r7, [r2, #-613]!	; 0x265
++  c0:	6f207470 	svcvs	0x00207470
++  c4:	6c73206e 	ldclvs	0, cr2, [r3], #-440	; 0xfffffe48
++  c8:	2520746f 	strcs	r7, [r0, #-1135]!	; 0x46f
++  cc:	00000064 	andeq	r0, r0, r4, rrx
++
++000000d0 <.LC5>:
++  d0:	65747441 	ldrbvs	r7, [r4, #-1089]!	; 0x441
++  d4:	2074706d 	rsbscs	r7, r4, sp, rrx
++  d8:	6564616d 	strbvs	r6, [r4, #-365]!	; 0x16d
++  dc:	206f7420 	rsbcs	r7, pc, r0, lsr #8
++  e0:	64726168 	ldrbtvs	r6, [r2], #-360	; 0x168
++  e4:	6f74732d 	svcvs	0x0074732d
++  e8:	20612070 	rsbcs	r2, r1, r0, ror r0
++  ec:	20626f6a 	rsbcs	r6, r2, sl, ror #30
++  f0:	74616874 	strbtvc	r6, [r1], #-2164	; 0x874
++  f4:	6e616320 	cdpvs	3, 6, cr6, cr1, cr0, {1}
++  f8:	20746f6e 	rsbscs	r6, r4, lr, ror #30
++  fc:	68206562 	stmdavs	r0!, {r1, r5, r6, r8, sl, sp, lr}
++ 100:	2d647261 	sfmcs	f7, 2, [r4, #-388]!	; 0xfffffe7c
++ 104:	706f7473 	rsbvc	r7, pc, r3, ror r4	; <UNPREDICTABLE>
++ 108:	2e646570 	mcrcs	5, 3, r6, cr4, cr0, {3}
++ 10c:	726f6320 	rsbvc	r6, pc, #32, 6	; 0x80000000
++ 110:	65725f65 	ldrbvs	r5, [r2, #-3941]!	; 0xf65
++ 114:	3d207371 	stccc	3, cr7, [r0, #-452]!	; 0xfffffe3c
++ 118:	25783020 	ldrbcs	r3, [r8, #-32]!
++ 11c:	00000058 	andeq	r0, r0, r8, asr r0
++
++00000120 <.LC6>:
++ 120:	76697264 	strbtvc	r7, [r9], -r4, ror #4
++ 124:	2f737265 	svccs	0x00737265
++ 128:	2f757067 	svccs	0x00757067
++ 12c:	2f6d7261 	svccs	0x006d7261
++ 130:	6764696d 	strbvs	r6, [r4, -sp, ror #18]!
++ 134:	2f647261 	svccs	0x00647261
++ 138:	696c616d 	stmdbvs	ip!, {r0, r2, r3, r5, r6, r8, sp, lr}^
++ 13c:	61626b5f 	cmnvs	r2, pc, asr fp
++ 140:	6a5f6573 	bvs	17d9714 <kbase_job_zap_context+0x17d7c9c>
++ 144:	00632e6d 	rsbeq	r2, r3, sp, ror #28
++
++00000148 <.LC7>:
++ 148:	69676552 	stmdbvs	r7!, {r1, r4, r6, r8, sl, sp, lr}^
++ 14c:	72657473 	rsbvc	r7, r5, #1929379840	; 0x73000000
++ 150:	61747320 	cmnvs	r4, r0, lsr #6
++ 154:	003a6574 	eorseq	r6, sl, r4, ror r5
++
++00000158 <.LC8>:
++ 158:	50472020 	subpl	r2, r7, r0, lsr #32
++ 15c:	52495f55 	subpl	r5, r9, #340	; 0x154
++ 160:	41525f51 	cmpmi	r2, r1, asr pc
++ 164:	41545357 	cmpmi	r4, r7, asr r3
++ 168:	78303d54 	ldmdavc	r0!, {r2, r4, r6, r8, sl, fp, ip, sp}
++ 16c:	78383025 	ldmdavc	r8!, {r0, r2, r5, ip, sp}
++ 170:	55504720 	ldrbpl	r4, [r0, #-1824]	; 0x720
++ 174:	4154535f 	cmpmi	r4, pc, asr r3
++ 178:	3d535554 	cfldr64cc	mvdx5, [r3, #-336]	; 0xfffffeb0
++ 17c:	30257830 	eorcc	r7, r5, r0, lsr r8
++ 180:	00007838 	andeq	r7, r0, r8, lsr r8
++
++00000184 <.LC9>:
++ 184:	4f4a2020 	svcmi	0x004a2020
++ 188:	52495f42 	subpl	r5, r9, #264	; 0x108
++ 18c:	41525f51 	cmpmi	r2, r1, asr pc
++ 190:	41545357 	cmpmi	r4, r7, asr r3
++ 194:	78303d54 	ldmdavc	r0!, {r2, r4, r6, r8, sl, fp, ip, sp}
++ 198:	78383025 	ldmdavc	r8!, {r0, r2, r5, ip, sp}
++ 19c:	424f4a20 	submi	r4, pc, #32, 20	; 0x20000
++ 1a0:	5152495f 	cmppl	r2, pc, asr r9
++ 1a4:	5f534a5f 	svcpl	0x00534a5f
++ 1a8:	54415453 	strbpl	r5, [r1], #-1107	; 0x453
++ 1ac:	78303d45 	ldmdavc	r0!, {r0, r2, r6, r8, sl, fp, ip, sp}
++ 1b0:	78383025 	ldmdavc	r8!, {r0, r2, r5, ip, sp}
++ 1b4:	424f4a20 	submi	r4, pc, #32, 20	; 0x20000
++ 1b8:	5152495f 	cmppl	r2, pc, asr r9
++ 1bc:	5248545f 	subpl	r5, r8, #1593835520	; 0x5f000000
++ 1c0:	4c54544f 	cfldrdmi	mvd5, [r4], {79}	; 0x4f
++ 1c4:	78303d45 	ldmdavc	r0!, {r0, r2, r6, r8, sl, fp, ip, sp}
++ 1c8:	78383025 	ldmdavc	r8!, {r0, r2, r5, ip, sp}
++ 1cc:	00000000 	andeq	r0, r0, r0
++
++000001d0 <.LC10>:
++ 1d0:	534a2020 	movtpl	r2, #40992	; 0xa020
++ 1d4:	535f6425 	cmppl	pc, #620756992	; 0x25000000
++ 1d8:	55544154 	ldrbpl	r4, [r4, #-340]	; 0x154
++ 1dc:	78303d53 	ldmdavc	r0!, {r0, r1, r4, r6, r8, sl, fp, ip, sp}
++ 1e0:	78383025 	ldmdavc	r8!, {r0, r2, r5, ip, sp}
++ 1e4:	20202020 	eorcs	r2, r0, r0, lsr #32
++ 1e8:	534a2020 	movtpl	r2, #40992	; 0xa020
++ 1ec:	485f6425 	ldmdami	pc, {r0, r2, r5, sl, sp, lr}^	; <UNPREDICTABLE>
++ 1f0:	5f444145 	svcpl	0x00444145
++ 1f4:	303d4f4c 	eorscc	r4, sp, ip, asr #30
++ 1f8:	38302578 	ldmdacc	r0!, {r3, r4, r5, r6, r8, sl, sp}
++ 1fc:	00000078 	andeq	r0, r0, r8, ror r0
++
++00000200 <.LC11>:
++ 200:	4d4d2020 	stclmi	0, cr2, [sp, #-128]	; 0xffffff80
++ 204:	52495f55 	subpl	r5, r9, #340	; 0x154
++ 208:	41525f51 	cmpmi	r2, r1, asr pc
++ 20c:	41545357 	cmpmi	r4, r7, asr r3
++ 210:	78303d54 	ldmdavc	r0!, {r2, r4, r6, r8, sl, fp, ip, sp}
++ 214:	78383025 	ldmdavc	r8!, {r0, r2, r5, ip, sp}
++ 218:	55504720 	ldrbpl	r4, [r0, #-1824]	; 0x720
++ 21c:	5541465f 	strbpl	r4, [r1, #-1631]	; 0x65f
++ 220:	5453544c 	ldrbpl	r5, [r3], #-1100	; 0x44c
++ 224:	53555441 	cmppl	r5, #1090519040	; 0x41000000
++ 228:	2578303d 	ldrbcs	r3, [r8, #-61]!	; 0x3d
++ 22c:	00783830 	rsbseq	r3, r8, r0, lsr r8
++
++00000230 <.LC12>:
++ 230:	50472020 	subpl	r2, r7, r0, lsr #32
++ 234:	52495f55 	subpl	r5, r9, #340	; 0x154
++ 238:	414d5f51 	cmpmi	sp, r1, asr pc
++ 23c:	303d4b53 	eorscc	r4, sp, r3, asr fp
++ 240:	38302578 	ldmdacc	r0!, {r3, r4, r5, r6, r8, sl, sp}
++ 244:	20202078 	eorcs	r2, r0, r8, ror r0
++ 248:	424f4a20 	submi	r4, pc, #32, 20	; 0x20000
++ 24c:	5152495f 	cmppl	r2, pc, asr r9
++ 250:	53414d5f 	movtpl	r4, #7519	; 0x1d5f
++ 254:	78303d4b 	ldmdavc	r0!, {r0, r1, r3, r6, r8, sl, fp, ip, sp}
++ 258:	78383025 	ldmdavc	r8!, {r0, r2, r5, ip, sp}
++ 25c:	20202020 	eorcs	r2, r0, r0, lsr #32
++ 260:	554d4d20 	strbpl	r4, [sp, #-3360]	; 0xd20
++ 264:	5152495f 	cmppl	r2, pc, asr r9
++ 268:	53414d5f 	movtpl	r4, #7519	; 0x1d5f
++ 26c:	78303d4b 	ldmdavc	r0!, {r0, r1, r3, r6, r8, sl, fp, ip, sp}
++ 270:	78383025 	ldmdavc	r8!, {r0, r2, r5, ip, sp}
++ 274:	00000000 	andeq	r0, r0, r0
++
++00000278 <.LC13>:
++ 278:	57502020 	ldrbpl	r2, [r0, -r0, lsr #32]
++ 27c:	564f5f52 			; <UNDEFINED> instruction: 0x564f5f52
++ 280:	49525245 	ldmdbmi	r2, {r0, r2, r6, r9, ip, lr}^
++ 284:	3d304544 	cfldr32cc	mvfx4, [r0, #-272]!	; 0xfffffef0
++ 288:	30257830 	eorcc	r7, r5, r0, lsr r8
++ 28c:	20207838 	eorcs	r7, r0, r8, lsr r8
++ 290:	52575020 	subspl	r5, r7, #32
++ 294:	45564f5f 	ldrbmi	r4, [r6, #-3935]	; 0xf5f
++ 298:	44495252 	strbmi	r5, [r9], #-594	; 0x252
++ 29c:	303d3145 	eorscc	r3, sp, r5, asr #2
++ 2a0:	38302578 	ldmdacc	r0!, {r3, r4, r5, r6, r8, sl, sp}
++ 2a4:	00000078 	andeq	r0, r0, r8, ror r0
++
++000002a8 <.LC14>:
++ 2a8:	48532020 	ldmdami	r3, {r5, sp}^
++ 2ac:	52454441 	subpl	r4, r5, #1090519040	; 0x41000000
++ 2b0:	4e4f435f 	mcrmi	3, 2, r4, cr15, cr15, {2}
++ 2b4:	3d474946 	stclcc	9, cr4, [r7, #-280]	; 0xfffffee8
++ 2b8:	30257830 	eorcc	r7, r5, r0, lsr r8
++ 2bc:	20207838 	eorcs	r7, r0, r8, lsr r8
++ 2c0:	5f324c20 	svcpl	0x00324c20
++ 2c4:	5f554d4d 	svcpl	0x00554d4d
++ 2c8:	464e4f43 	strbmi	r4, [lr], -r3, asr #30
++ 2cc:	303d4749 	eorscc	r4, sp, r9, asr #14
++ 2d0:	38302578 	ldmdacc	r0!, {r3, r4, r5, r6, r8, sl, sp}
++ 2d4:	00000078 	andeq	r0, r0, r8, ror r0
++
++000002d8 <.LC15>:
++ 2d8:	65736552 	ldrbvs	r6, [r3, #-1362]!	; 0x552
++ 2dc:	6e697474 	mcrvs	4, 3, r7, cr9, cr4, {3}
++ 2e0:	50472067 	subpl	r2, r7, r7, rrx
++ 2e4:	61282055 	qsubvs	r2, r5, r8
++ 2e8:	776f6c6c 	strbvc	r6, [pc, -ip, ror #24]!
++ 2ec:	20676e69 	rsbcs	r6, r7, r9, ror #28
++ 2f0:	74207075 	strtvc	r7, [r0], #-117	; 0x75
++ 2f4:	6425206f 	strtvs	r2, [r5], #-111	; 0x6f
++ 2f8:	29736d20 	ldmdbcs	r3!, {r5, r8, sl, fp, sp, lr}^
++ 2fc:	00000000 	andeq	r0, r0, r0
++
++00000300 <.LC16>:
++ 300:	20626f4a 	rsbcs	r6, r2, sl, asr #30
++ 304:	63757473 	cmnvs	r5, #1929379840	; 0x73000000
++ 308:	6e69206b 	cdpvs	0, 6, cr2, cr9, cr11, {3}
++ 30c:	6f6c7320 	svcvs	0x006c7320
++ 310:	64252074 	strtvs	r2, [r5], #-116	; 0x74
++ 314:	206e6f20 	rsbcs	r6, lr, r0, lsr #30
++ 318:	20656874 	rsbcs	r6, r5, r4, ror r8
++ 31c:	20555047 	subscs	r5, r5, r7, asr #32
++ 320:	20736177 	rsbscs	r6, r3, r7, ror r1
++ 324:	636e6163 	cmnvs	lr, #-1073741800	; 0xc0000018
++ 328:	656c6c65 	strbvs	r6, [ip, #-3173]!	; 0xc65
++ 32c:	00000064 	andeq	r0, r0, r4, rrx
++
++00000330 <.LC17>:
++ 330:	65736552 	ldrbvs	r6, [r3, #-1362]!	; 0x552
++ 334:	6f632074 	svcvs	0x00632074
++ 338:	656c706d 	strbvs	r7, [ip, #-109]!	; 0x6d
++ 33c:	00006574 	andeq	r6, r0, r4, ror r5
++
++00000340 <.LC18>:
++ 340:	70657250 	rsbvc	r7, r5, r0, asr r2
++ 344:	6e697261 	cdpvs	2, 6, cr7, cr9, cr1, {3}
++ 348:	6f742067 	svcvs	0x00742067
++ 34c:	666f7320 	strbtvs	r7, [pc], -r0, lsr #6
++ 350:	65722d74 	ldrbvs	r2, [r2, #-3444]!	; 0xd74
++ 354:	20746573 	rsbscs	r6, r4, r3, ror r5
++ 358:	3a555047 	bcc	155447c <kbase_job_zap_context+0x1552a04>
++ 35c:	69615720 	stmdbvs	r1!, {r5, r8, r9, sl, ip, lr}^
++ 360:	676e6974 			; <UNDEFINED> instruction: 0x676e6974
++ 364:	70752820 	rsbsvc	r2, r5, r0, lsr #16
++ 368:	25206f74 	strcs	r6, [r0, #-3956]!	; 0xf74
++ 36c:	736d2064 	cmnvc	sp, #100	; 0x64
++ 370:	6f662029 	svcvs	0x00662029
++ 374:	6c612072 	stclvs	0, cr2, [r1], #-456	; 0xfffffe38
++ 378:	6f6a206c 	svcvs	0x006a206c
++ 37c:	74207362 	strtvc	r7, [r0], #-866	; 0x362
++ 380:	6f63206f 	svcvs	0x0063206f
++ 384:	656c706d 	strbvs	r7, [ip, #-109]!	; 0x6d
++ 388:	73206574 	teqvc	r0, #116, 10	; 0x1d000000
++ 38c:	2d74666f 	ldclcs	6, cr6, [r4, #-444]!	; 0xfffffe44
++ 390:	706f7473 	rsbvc	r7, pc, r3, ror r4	; <UNPREDICTABLE>
++ 394:	0000000a 	andeq	r0, r0, sl
++
++00000398 <.LC19>:
++ 398:	75737349 	ldrbvc	r7, [r3, #-841]!	; 0x349
++ 39c:	676e6965 	strbvs	r6, [lr, -r5, ror #18]!
++ 3a0:	55504720 	ldrbpl	r4, [r0, #-1824]	; 0x720
++ 3a4:	73090909 	movwvc	r0, #39177	; 0x9909
++ 3a8:	2d74666f 	ldclcs	6, cr6, [r4, #-444]!	; 0xfffffe44
++ 3ac:	65736572 	ldrbvs	r6, [r3, #-1394]!	; 0x572
++ 3b0:	66612074 			; <UNDEFINED> instruction: 0x66612074
++ 3b4:	20726574 	rsbscs	r6, r2, r4, ror r5
++ 3b8:	64726168 	ldrbtvs	r6, [r2], #-360	; 0x168
++ 3bc:	6f747320 	svcvs	0x00747320
++ 3c0:	6e697070 	mcrvs	0, 3, r7, cr9, cr0, {3}
++ 3c4:	75642067 	strbvc	r2, [r4, #-103]!	; 0x67
++ 3c8:	6f742065 	svcvs	0x00742065
++ 3cc:	72616820 	rsbvc	r6, r1, #32, 16	; 0x200000
++ 3d0:	72617764 	rsbvc	r7, r1, #100, 14	; 0x1900000
++ 3d4:	73692065 	cmnvc	r9, #101	; 0x65
++ 3d8:	00657573 	rsbeq	r7, r5, r3, ror r5
++
++Disassembly of section .comment:
++
++00000000 <.comment>:
++   0:	43434700 	movtmi	r4, #14080	; 0x3700
++   4:	5528203a 	strpl	r2, [r8, #-58]!	; 0x3a
++   8:	746e7562 	strbtvc	r7, [lr], #-1378	; 0x562
++   c:	694c2f75 	stmdbvs	ip, {r0, r2, r4, r5, r6, r8, r9, sl, fp, sp}^
++  10:	6f72616e 	svcvs	0x0072616e
++  14:	382e3420 	stmdacc	lr!, {r5, sl, ip, sp}
++  18:	312d322e 	teqcc	sp, lr, lsr #4
++  1c:	75627539 	strbvc	r7, [r2, #-1337]!	; 0x539
++  20:	3175746e 	cmncc	r5, lr, ror #8
++  24:	2e342029 	cdpcs	0, 3, cr2, cr4, cr9, {1}
++  28:	00322e38 	eorseq	r2, r2, r8, lsr lr
++
++Disassembly of section .ARM.attributes:
++
++00000000 <.ARM.attributes>:
++   0:	00002e41 	andeq	r2, r0, r1, asr #28
++   4:	61656100 	cmnvs	r5, r0, lsl #2
++   8:	01006962 	tsteq	r0, r2, ror #18
++   c:	00000024 	andeq	r0, r0, r4, lsr #32
++  10:	412d3705 	teqmi	sp, r5, lsl #14
++  14:	070a0600 	streq	r0, [sl, -r0, lsl #12]
++  18:	09010841 	stmdbeq	r1, {r0, r6, fp}
++  1c:	14041202 	strne	r1, [r4], #-514	; 0x202
++  20:	17011501 	strne	r1, [r1, -r1, lsl #10]
++  24:	19011803 	stmdbne	r1, {r0, r1, fp, ip}
++  28:	1e021a01 	vmlane.f32	s2, s4, s2
++  2c:	Address 0x0000002c is out of bounds.
++
++
++Disassembly of section __mcount_loc:
++
++00000000 <__mcount_loc>:
++   0:	00000010 	andeq	r0, r0, r0, lsl r0
++   4:	000000b0 	strheq	r0, [r0], -r0	; <UNPREDICTABLE>
++   8:	000000f4 	strdeq	r0, [r0], -r4
++   c:	0000025c 	andeq	r0, r0, ip, asr r2
++  10:	00000338 	andeq	r0, r0, r8, lsr r3
++  14:	000004bc 			; <UNDEFINED> instruction: 0x000004bc
++  18:	000008c0 	andeq	r0, r0, r0, asr #17
++  1c:	00000a30 	andeq	r0, r0, r0, lsr sl
++  20:	00000da0 	andeq	r0, r0, r0, lsr #27
++  24:	00000e08 	andeq	r0, r0, r8, lsl #28
++  28:	00000e20 	andeq	r0, r0, r0, lsr #28
++  2c:	00000e3c 	andeq	r0, r0, ip, lsr lr
++  30:	00000e74 	andeq	r0, r0, r4, ror lr
++  34:	000010c8 	andeq	r1, r0, r8, asr #1
++  38:	000016e8 	andeq	r1, r0, r8, ror #13
++  3c:	00001754 	andeq	r1, r0, r4, asr r7
++  40:	000017ec 	andeq	r1, r0, ip, ror #15
++  44:	00001838 	andeq	r1, r0, r8, lsr r8
++  48:	000018b8 			; <UNDEFINED> instruction: 0x000018b8
++  4c:	00001938 	andeq	r1, r0, r8, lsr r9
++  50:	000019fc 	strdeq	r1, [r0], -ip
++  54:	00001a88 	andeq	r1, r0, r8, lsl #21
