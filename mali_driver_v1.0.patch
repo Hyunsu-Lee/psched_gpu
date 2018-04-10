@@ -10,7 +10,7 @@ diff -uprN odxu3_3.10.72_original/arch/arm/boot/dts/exynos5422_evt0.dtsi transcl
 +            interrupt-parent = <&combiner>;
 +            interrupts = <1 2>, <7 0>, <16 6>, <19 2>;
 +        */
-+        ompatible = "arm,cortex-a7-pmu";
++        compatible = "arm,cortex-a7-pmu";
 +        interrupt-parent = <&gic>;
 +        interrupts = <0 192 4>, <0 193 4>, <0 194 4>, <0 195 4>;
 +    };
