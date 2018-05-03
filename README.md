@@ -21,7 +21,7 @@ To apply our customizing GPU device driver to original kernel, you should downlo
 	
 And you should set kernel config file using provied .config file.
 
-	[kernel dir]$ make menuconfig
+	[kernel dir]$ sudo make menuconfig
 
 To build and install patched kernel,
 
