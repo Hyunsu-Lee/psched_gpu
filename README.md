@@ -11,7 +11,7 @@ To apply our customizing GPU device driver to original kernel, you should downlo
 
 To build and install patched kernel,
 
-	[patched kernel dir]$ sudo ./install.sh
+	[patched kernel dir]$ sudo sh ./install.sh
 
 ## How to use our preemptive GPU scheduler
 To use our preemptive GPU scheduler, you only designate priority(NICE value) of each of applications by 'nice' command when running a GPGPU program. Especially, if you apply NICE value '-20' to a task, this task will run with the highest priority without snapshot process. For example,
