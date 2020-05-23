@@ -1,11 +1,11 @@
-# Transactional GPU Kernel Scheme
+# Transactional GPU Kernel Scheme (IEEE Real-Time and Embedded Technology and Application Symposium 2018)
 
 This preemptive GPU scheduler for ARM Mali-T628 GPU is an OS-level solution to the priority inversion problem. Exploiting the shared physical memory between the CPU and GPU in heterogeneous system architecture (HSA), we propose an approach to transactionize the GPU kernels. By snapshotting the kernel GPU memory in advance, A transactionized GPU kernel can be aborted at any point during its execution and rolled back to its initial state for re-execution. Based on this transactionizing GPU kernels, it is possible to evict low-priority kernels and immediately schedule high-priority kernels forcibly. The preempted low-priority kernel instances can be re-executed after a GPU becomes available.
 
 Our preemptive GPU scheduling concept is implemented in the device driver of a Mali T-628 MP6 GPU based on a Samsung Exynos 5422 system on chip (SoC). To apply our implementation to the Exynos 5422 system, you must install a specific kernel version 3.10.72 because our code is currently supporting that specific version. You can download the kernel 3.10.72 for Exynos from Hardkernel Github repository (https://github.com/hardkernel/linux). In order to apply our schemes to the Linux kernel, patch the downloaded original Mali driver with our Mali GPU device driver patch file.
 
-## Opend new repository
-We published a project for extending Transactional GPU Kernel scheme(Transcl project) to supporting idempotent kernel awared scheduling(iKernel project). You can access our projects at the following.
+## Opend new repository (IEEE Transaction on Computers 2020)
+We published a project for extending Transactional GPU Kernel scheme(Transcl project) to supporting idempotent kernel awared scheduling(iKernel). You can access our projects at the following.
 
 https://github.com/Hyunsu-Lee/preemptive_gpu_scheduling
 
