@@ -5,9 +5,11 @@ This preemptive GPU scheduler for ARM Mali-T628 GPU is an OS-level solution to t
 Our preemptive GPU scheduling concept is implemented in the device driver of a Mali T-628 MP6 GPU based on a Samsung Exynos 5422 system on chip (SoC). To apply our implementation to the Exynos 5422 system, you must install a specific kernel version 3.10.72 because our code is currently supporting that specific version. You can download the kernel 3.10.72 for Exynos from Hardkernel Github repository (https://github.com/hardkernel/linux). In order to apply our schemes to the Linux kernel, patch the downloaded original Mali driver with our Mali GPU device driver patch file.
 
 ## Opend new repository
-We published a project for extending Transactional GPU Kernel scheme(Transcl project) to supporting idempotent kernel awared scheduling(iKernel project). You can access our projects as flowwing.
+We published a project for extending Transactional GPU Kernel scheme(Transcl project) to supporting idempotent kernel awared scheduling(iKernel project). You can access our projects as fllowing.
 
-	https://github.com/Hyunsu-Lee/preemptive_gpu_scheduling
+https://github.com/Hyunsu-Lee/preemptive_gpu_scheduling
+
+This new repository includes not only a new project but also a previous project through branchs. And you can more simply  apply our approach to your machine than before because we provide full source code.
 
 ## How to prepare vanila kernel
 To use our base kernel version, you should download 3.10.y version kernel source branch for odroid XU3 in Hardkernel Github repository.
